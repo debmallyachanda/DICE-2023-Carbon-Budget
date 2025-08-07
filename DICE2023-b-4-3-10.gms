@@ -55,7 +55,8 @@ PARAMETERS
         tstep       Years per Period                               / 5  /
         SRF         Scaling factor discounting                     /1000000/
         scale1      Multiplicative scaling coefficient             / 0.00891061 /
-        scale2      Additive scaling coefficient                   /-6275.91/ ;
+        scale2      Additive scaling coefficient                   /-6275.91/
+        carbonbc2100      Carbon Budget Limit (2020-2100)          /1000/;
 ** Program control variables
 sets     tfirst(t), tlast(t), tearly(t), tlate(t);
 PARAMETERS
@@ -100,10 +101,15 @@ PARAMETERS
         gsig(t)         = min(gsigma1*delgsig **((t.val-1)),asymgsig);
         loop(t, sigma(t+1)  = sigma(t)*exp(5*gsig(t)););
 ** Emissions limits
-        miuup('1')= .05; miuup('2')= .10; miuup(t)$(t.val > 2)  = (delmiumax*(t.val-1));
-        miuup(t)$(t.val > 8)  = 0.85+.05*(t.val-8); miuup(t)$(t.val > 11) = limmiu2070;
-        miuup(t)$(t.val > 20) = limmiu2120; miuup(t)$(t.val > 37) = limmiu2200; miuup(t)$(t.val > 57) = limmiu2300;       
-** Include file for non-CO2 GHGs
+        miuup('1')= .05;
+        miuup('2')= .10;
+        miuup(t)$(t.val > 2)  = (delmiumax*(t.val-1));
+        miuup(t)$(t.val > 8)  = 0.85+.05*(t.val-8);
+        miuup(t)$(t.val > 11) = limmiu2070;
+        miuup(t)$(t.val > 20) = limmiu2120;
+* miuup(t)$(t.val > 37) = limmiu2200;
+* miuup(t)$(t.val > 57) = limmiu2300;       
+* Include file for non-CO2 GHGs
 $include Include/Nonco2-b-4-3-1.gms
 * Program control definitions
         tfirst(t) = yes$(t.val eq 1);
@@ -154,7 +160,9 @@ EQUATIONS
 * Utility
         TOTPERIODUEQ(t)  Period utility
         PERIODUEQ(t)     Instantaneous utility function equation
-        UTILEQ           Objective function      ;
+        UTILEQ           Objective function
+* Carbon Budget Constraint
+        CARBONBC         Carbon Budget Constraint;
 
 ** Include file for DFAIR model and climate equations
 $include Include/FAIR-beta-4-3-1.gms
@@ -186,6 +194,8 @@ $include Include/FAIR-beta-4-3-1.gms
  periodueq(t)..       PERIODU(t)     =E= ((C(T)*1000/L(T))**(1-elasmu)-1)/(1-elasmu)-1;
  totperiodueq(t)..    TOTPERIODU(t)  =E= PERIODU(t) * L(t) * RR(t);
  utileq..             UTILITY        =E= tstep * scale1 * sum(t,  TOTPERIODU(t)) + scale2;
+* Carbon Budget Constraint Implementation
+ carbonbc.. sum(t$(ord(t) <= 17), 5*ECO2(t)) =L= carbonbc2100;
 
 * Various control rate limits, initial and terminal conditions
 miu.up(t)       = miuup(t);
@@ -196,11 +206,11 @@ RFACTLONG.lo(t) =.0001;
 *set lag10(t) ;
 *lag10(t)                =  yes$(t.val gt card(t)-10);
 *S.FX(lag10(t))          = optlrsav;
-s.fx(t)$(t.val > 37)    =.28;
-ccatot.fx(tfirst)       = CumEmiss0;
+*s.fx(t)$(t.val > 37)    =.28;
+ccatot.fx(tfirst)       = CumEmiss0; 
 K.FX(tfirst)            = k0;
 F_GHGabate.fx(tfirst)   = F_GHGabate2020;
-RFACTLONG.fx(tfirst)    = 1000000; 
+RFACTLONG.fx(tfirst)    = 1000000;
 
 ** Solution options
 option iterlim = 99900; option reslim = 99999; option solprint = on; option limrow = 0; option limcol = 0;
