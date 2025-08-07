@@ -104,7 +104,7 @@ PARAMETERS
         miuup(t)$(t.val > 8)  = 0.85+.05*(t.val-8); miuup(t)$(t.val > 11) = limmiu2070;
         miuup(t)$(t.val > 20) = limmiu2120; miuup(t)$(t.val > 37) = limmiu2200; miuup(t)$(t.val > 57) = limmiu2300;       
 ** Include file for non-CO2 GHGs
-$include Include\Nonco2-b-4-3-1.gms
+$include Include/Nonco2-b-4-3-1.gms
 * Program control definitions
         tfirst(t) = yes$(t.val eq 1);
         tlast(t)  = yes$(t.val eq card(t));
@@ -157,7 +157,7 @@ EQUATIONS
         UTILEQ           Objective function      ;
 
 ** Include file for DFAIR model and climate equations
-$include Include\FAIR-beta-4-3-1.gms
+$include Include/FAIR-beta-4-3-1.gms
 
 **** Equations of the model
 **Emissions and Damages
@@ -211,7 +211,7 @@ ifopt=1;
 solve CO2 maximizing UTILITY using nlp ;
  
 **** STATEMENTS FOR DEFINITIONS AND PUT STATEMENTS FOR MAJOR SCENARIOS
-$include Include\Putlong-4-3-10.gms
+$include Include/Putlong-4-3-10.gms
 
 *DISPLAY FOR MAJOR VARIABLES
 option decimals = 6;

@@ -1,0 +1,2912 @@
+GAMS 50.3.0  5a352073 Jul 30, 2025          DAX-DAC arm 64bit/macOS - 08/07/25 17:06:13 Page 1
+G e n e r a l   A l g e b r a i c   M o d e l i n g   S y s t e m
+C o m p i l a t i o n
+
+
+      DICE2023-beta-4-3-10 as of October 16, 2023
+   4   
+GAMS 50.3.0  5a352073 Jul 30, 2025          DAX-DAC arm 64bit/macOS - 08/07/25 17:06:13 Page 2
+October 12, 2023 (DICE2023-b-4-3-10.gms)
+C o m p i l a t i o n
+
+
+   6   
+   7  set        t  Time periods (5 years per period)                   /1*81/
+   8  PARAMETERS
+   9  ** If optimal control
+  10          ifopt    Indicator where optimized is 1 and base is 0     /1/
+  11  ** Population and technology
+  12          gama     Capital elasticity in production function        /.300    /
+  13          pop1     Initial world population 2020 (millions)         /7752.9  /
+  14          popadj   Growth rate to calibrate to 2050 pop projection  /0.145   /
+  15          popasym  Asymptotic population (millions)                 /10825.  /
+  16          dk       Depreciation rate on capital (per year)          /0.100    /
+  17          q1       Initial world output 2020 (trill 2019 USD)       /135.7   /
+  18          AL1       Initial level of total factor productivity       /5.84 /
+  19          gA1      Initial growth rate for TFP per 5 years          /0.066   /
+  20          delA     Decline rate of TFP per 5 years                  /0.0015  /
+  21  ** Emissions parameters and Non-CO2 GHG with sigma = emissions/output
+  22          gsigma1   Initial growth of sigma (per year)                   / -0.015 /
+  23          delgsig   Decline rate of gsigma per period                    /.96/
+  24          asymgsig   Asympototic gsigma                                  /-.005/
+  25          e1        Industrial emissions 2020 (GtCO2 per year)           / 37.56  /
+  26          miu1      Emissions control rate historical 2020               / .05    /
+  27          fosslim   Maximum cumulative extraction fossil fuels (GtC)     / 6000   /
+  28          CumEmiss0 Cumulative emissions 2020 (GtC)                      / 633.5/
+  29  * Climate damage parameters
+  30          a1        Damage intercept                                    /0      /
+  31          a2base    Damage quadratic term rev 01-13-23                  /0.003467/
+  32          a3        Damage exponent                                     /2.00   /
+  33  ** Abatement cost
+  34          expcost2  Exponent of control cost function                   / 2.6  /
+  35          pback2050 Cost of backstop 2019$ per tCO2 2050                / 515.  /
+  36          gback     Initial cost decline backstop cost per year         / -.012 /
+  37          cprice1   Carbon price 2020 2019$ per tCO2                    / 6    /
+  38          gcprice   Growth rate of base carbon price per year           /.025   /
+  39  ** Limits on emissions controls
+  40          limmiu2070    Emission control limit from 2070          /1.0/
+  41          limmiu2120    Emission control limit from 2120          /1.1/
+  42          limmiu2200    Emission control limit from 2220          /1.05/
+  43          limmiu2300    Emission control limit from 2300          /1.0/
+  44          delmiumax     Emission control delta limit per period   / 0.12/
+  45  ** Preferences, growth uncertainty, and timing
+  46          betaclim  Climate beta                                      / 0.5  /
+  47          elasmu    Elasticity of marginal utility of consumption     / 0.95 /
+  48          prstp     Pure rate of social time preference               /.001/
+  49          pi        Capital risk premium                              / .05  /
+  50          rartp       Risk-adjusted rate of time preference
+  51          k0        Initial capital stock calibrated (1012 2019 USD)  / 295  /
+  52          siggc1    Annual standard deviation of consumption growth   / .01 /
+  53          sig1      Carbon intensity 2020 kgCO2-output 2020
+  54  ** Scaling so that MU(C(1)) = 1 and objective function = PV consumption
+  55          tstep       Years per Period                               / 5  /
+  56          SRF         Scaling factor discounting                     /1000000/
+  57          scale1      Multiplicative scaling coefficient             / 0.00891061 /
+  58          scale2      Additive scaling coefficient                   /-6275.91/ ;
+  59  ** Program control variables
+  60  sets     tfirst(t), tlast(t), tearly(t), tlate(t);
+  61  PARAMETERS
+  62          L(t)           Level of population and labor
+  63          aL(t)          Level of total factor productivity
+  64          sigma(t)       CO2-emissions output ratio
+  65          sigmatot(t)    GHG-output ratio
+  66          gA(t)          Growth rate of productivity from
+  67          gL(t)          Growth rate of labor and population
+  68          gcost1         Growth of cost factor
+  69          gsig(t)        Change in sigma (rate of decarbonization)
+  70          eland(t)       Emissions from deforestation (GtCO2 per year)
+  71          cost1tot(T)    Abatement cost adjusted for backstop and sigma
+  72          pbacktime(t)   Backstop price 2019$ per ton CO2
+  73          optlrsav       Optimal long-run savings rate used for transversality
+  74          scc(t)         Social cost of carbon
+  75          cpricebase(t)  Carbon price in base case
+  76          ppm(t)         Atmospheric concentrations parts per million
+  77          atfrac2020(t)  Atmospheric share since 2020
+  78          atfrac1765(t)  Atmospheric fraction of emissions since 1765
+  79          abaterat(t)    Abatement cost per net output
+  80          miuup(t)       Upper bound on miu
+  81          gbacktime(t)   Decline rate of backstop price
+  82  ** Precautionary dynamic parameters
+  83          varpcc(t)         Variance of per capita consumption
+  84          rprecaut(t)       Precautionary rate of return
+  85          RR(t)             STP with precautionary factor
+  86          RR1(t)            STP factor without precautionary factor;
+  87  ** Time preference for climate investments and precautionary effect
+  88          rartp           = exp( prstp + betaclim*pi)-1;
+  89          varpcc(t)       =  min(Siggc1**2*5*(t.val-1),Siggc1**2*5*47);
+  90          rprecaut(t)     = -0.5*varpcc(t)*elasmu**2;
+  91          RR1(t)          = 1/((1+rartp)**(tstep*(t.val-1)));
+  92          RR(t)           = RR1(t)*(1+rprecaut(t))**(-tstep*(t.val-1));
+  93          L("1") = pop1; loop(t, L(t+1)=L(t);); loop(t, L(t+1)  = L(t)*(popasym/L(t))**popadj ;);
+  94          gA(t)           = gA1*exp(-delA*5*((t.val-1))); aL("1") = AL1; loop(t, aL(t+1)=aL(t)/((1-gA(t))););
+  95          optlrsav        =(dk + .004)/(dk + .004*elasmu + rartp)*gama;
+  96          cpricebase(t)   = cprice1*(1+gcprice)**(5*(t.val-1));
+  97          pbacktime(t)    = pback2050*exp(-5*(.01)*(t.val-7));
+  98          pbacktime(t)$(t.val > 7) = pback2050*exp(-5*(.001)*(t.val-7));
+  99          sig1            = e1/(q1*(1-miu1)); sigma("1") = sig1;
+ 100          gsig(t)         = min(gsigma1*delgsig **((t.val-1)),asymgsig);
+ 101          loop(t, sigma(t+1)  = sigma(t)*exp(5*gsig(t)););
+ 102  ** Emissions limits
+ 103          miuup('1')= .05; miuup('2')= .10; miuup(t)$(t.val > 2)  = (delmiumax*(t.val-1));
+ 104          miuup(t)$(t.val > 8)  = 0.85+.05*(t.val-8); miuup(t)$(t.val > 11) = limmiu2070;
+ 105          miuup(t)$(t.val > 20) = limmiu2120; miuup(t)$(t.val > 37) = limmiu2200; miuup(t)$(t.val > 57) = limmiu2300;
+ 106  ** Include file for non-CO2 GHGs
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/Nonco2-b-4-3-1.gms
+ 108  * nonco2 Parameters
+ 109  Parameters
+ 110          CO2E_GHGabateB(t)         Abateable non-CO2 GHG emissions base
+ 111          CO2E_GHGabateact(t)       Abateable non-CO2 GHG emissions base (actual)
+ 112          F_Misc(t)                 Non-abateable forcings (GHG and other)
+ 113          emissrat(t)               Ratio of CO2e to industrial emissions
+ 114          sigmatot(t)               Emissions output ratio for CO2e
+ 115          FORC_CO2(t)               CO2 Forcings
+ 116  ;
+ 117  ** Parameters for non-industrial emission
+ 118  ** Assumes abateable share of non-CO2 GHG is 65%
+ 119  Parameters
+ 120          eland0         Carbon emissions from land 2015 (GtCO2 per year)  / 5.9    /
+ 121          deland         Decline rate of land emissions (per period)       / .1     /
+ 122          F_Misc2020     Non-abatable forcings 2020                       /  -0.054    /
+ 123          F_Misc2100     Non-abatable forcings 2100                        / .265/
+ 124          F_GHGabate2020 Forcings of abatable nonCO2 GHG                   / 0.518 /
+ 125          F_GHGabate2100 Forcings of abatable nonCO2 GHG                   / 0.957 /
+ 126   
+ 127          ECO2eGHGB2020  Emis of abatable nonCO2 GHG GtCO2e  2020             /  9.96/
+ 128          ECO2eGHGB2100  Emis of abatable nonCO2 GHG GtCO2e  2100             /  15.5 /
+ 129          emissrat2020   Ratio of CO2e to industrial CO2 2020                 / 1.40 /
+ 130          emissrat2100   Ratio of CO2e to industrial CO2 2020                 / 1.21 /
+ 131          Fcoef1         Coefficient of nonco2 abateable emissions            /0.00955/
+ 132          Fcoef2         Coefficient of nonco2 abateable emissions            /.861/
+ 133          ;
+ 134  ** Parameters emissions and non-CO2
+ 135          eland(t) = eland0*(1-deland)**(t.val-1); eland(t) = eland0*(1-deland)**(t.val-1);
+ 136          CO2E_GHGabateB(t)=ECO2eGHGB2020+((ECO2eGHGB2100-ECO2eGHGB2020)/16)*(t.val-1)$(t.val le 16)+((ECO2eGHGB2100-ECO2eGHGB2020))$(t.val ge 17);
+ 137          F_Misc(t)=F_Misc2020 +((F_Misc2100-F_Misc2020)/16)*(t.val-1)$(t.val le 16)+((F_Misc2100-F_Misc2020))$(t.val ge 17);
+ 138          emissrat(t) = emissrat2020 +((emissrat2100-emissrat2020)/16)*(t.val-1)$(t.val le 16)+((emissrat2100-emissrat2020))$(t.val ge 17);
+ 139          sigmatot(t) = sigma(t)*emissrat(t);
+ 140          cost1tot(t) = pbacktime(T)*sigmatot(T)/expcost2/1000;
+ 141  VARIABLES
+ 142          ECO2(t)         Total CO2 emissions (GtCO2 per year)
+ 143          ECO2E(t)        Total CO2e emissions including abateable nonCO2 GHG (GtCO2 per year)
+ 144          EIND(t)         Industrial CO2 emissions (GtCO2 per yr)
+ 145          F_GHGabate      Forcings abateable nonCO2 GHG
+ 146  ;
+ 147  Equations
+ 148          ECO2eq(t)         CO2 Emissions equation
+ 149          ECO2Eeq(t)        CO2E Emissions equation
+ 150          EINDeq(t)        Industrial CO2 equation
+ 151          F_GHGabateEQ(t)
+ 152  ;
+ 153  * Program control definitions
+ 154          tfirst(t) = yes$(t.val eq 1);
+ 155          tlast(t)  = yes$(t.val eq card(t));
+ 156  VARIABLES
+ 157          MIU(t)          Emission control rate GHGs
+ 158          C(t)            Consumption (trillions 2019 US dollars per year)
+ 159          K(t)            Capital stock (trillions 2019 US dollars)
+ 160          CPC(t)          Per capita consumption (thousands 2019 USD per year)
+ 161          I(t)            Investment (trillions 2019 USD per year)
+ 162          S(t)            Gross savings rate as fraction of gross world product
+ 163          Y(t)            Gross world product net of abatement and damages (trillions 2019 USD per year)
+ 164          YGROSS(t)       Gross world product GROSS of abatement and damages (trillions 2019 USD per year)
+ 165          YNET(t)         Output net of damages equation (trillions 2019 USD per year)
+ 166          DAMAGES(t)      Damages (trillions 2019 USD per year)
+ 167          DAMFRAC(t)      Damages as fraction of gross output
+ 168          ABATECOST(t)    Cost of emissions reductions  (trillions 2019 USD per year)
+ 169          MCABATE(t)      Marginal cost of abatement (2019$ per ton CO2)
+ 170          CCATOT(t)       Total carbon emissions (GtC)
+ 171          PERIODU(t)      One period utility function
+ 172          CPRICE(t)       Carbon price (2019$ per ton of CO2)
+ 173          TOTPERIODU(t)   Period utility
+ 174          UTILITY         Welfare function
+ 175          RFACTLONG(t)
+ 176          RSHORT(t)       Real interest rate with precautionary(per annum year on year)
+ 177          RLONG(t)        Real interest rate from year 0 to T
+ 178  ;
+ 179  NONNEGATIVE VARIABLES  MIU, TATM, MAT, MU, ML, Y, YNET, YGROSS, C, K, I, RFACTLONG;
+ 180  EQUATIONS
+ 181  *Emissions and Damages
+ 182          CCATOTEQ(t)      Cumulative total carbon emissions
+ 183          DAMFRACEQ(t)     Equation for damage fraction
+ 184          DAMEQ(t)         Damage equation
+ 185          ABATEEQ(t)       Cost of emissions reductions equation
+ 186          MCABATEEQ(t)     Equation for MC abatement
+ 187          CARBPRICEEQ(t)   Carbon price equation from abatement
+ 188  *Economic variables
+ 189          YGROSSEQ(t)      Output gross equation
+ 190          YNETEQ(t)        Output net of damages equation
+ 191          YY(t)            Output net equation
+ 192          CC(t)            Consumption equation
+ 193          CPCE(t)          Per capita consumption definition
+ 194          SEQ(t)           Savings rate equation
+ 195          KK(t)            Capital balance equation
+ 196          RSHORTEQ(t)      Short-run interest rate equation
+ 197          RLONGeq(t)       Long-run interest rate equation
+ 198          RFACTLONGeq(t)   Long interest factor
+ 199  * Utility
+ 200          TOTPERIODUEQ(t)  Period utility
+ 201          PERIODUEQ(t)     Instantaneous utility function equation
+ 202          UTILEQ           Objective function      ;
+ 203   
+ 204  ** Include file for DFAIR model and climate equations
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/FAIR-beta-4-3-1.gms
+ 206  ** Equals old FAIR with recalibrated parameters for revised F2xco2 and Millar model.
+ 207  ** Deletes nonnegative reservoirs. See explanation below
+ 208   
+ 209   
+ 210  sets     tfirst(t), tlast(t);
+ 211   
+ 212  PARAMETERS
+ 213           yr0     Calendar year that corresponds to model year zero         /2020/
+ 214          emshare0 Carbon emissions share into Reservoir 0   /0.2173/
+ 215          emshare1 Carbon emissions share into Reservoir 1    /0.224/
+ 216          emshare2 Carbon emissions share into Reservoir 2    /0.2824/
+ 217          emshare3 Carbon emissions share into Reservoir 3    /0.2763/
+ 218          tau0    Decay time constant for R0  (year)                            /1000000/
+ 219          tau1    Decay time constant for R1  (year)                            /394.4/
+ 220          tau2    Decay time constant for R2  (year)       /36.53/
+ 221          tau3    Decay time constant for R3  (year) /4.304/
+ 222   
+ 223          teq1    Thermal equilibration parameter for box 1 (m^2 per KW)         /0.324/
+ 224          teq2    Thermal equilibration parameter for box 2 (m^2 per KW)        /0.44/
+ 225          d1      Thermal response timescale for deep ocean (year)               /236/
+ 226          d2      Thermal response timescale for upper ocean (year)              /4.07/
+ 227   
+ 228          irf0    Pre-industrial IRF100 (year)                                        /32.4/
+ 229          irC      Increase in IRF100 with cumulative carbon uptake (years per GtC)    /0.019/
+ 230          irT      Increase in IRF100 with warming (years per degree K)                /4.165/
+ 231          fco22x   Forcings of equilibrium CO2 doubling (Wm-2)                        /3.93/
+ 232   
+ 233  ** INITIAL CONDITIONS TO BE CALIBRATED TO HISTORY
+ 234  ** CALIBRATION
+ 235         mat0   Initial concentration in atmosphere in 2020 (GtC)       /886.5128014/
+ 236   
+ 237         res00  Initial concentration in Reservoir 0 in 2020 (GtC)      /150.093 /
+ 238         res10  Initial concentration in Reservior 1 in 2020 (GtC)      /102.698 /
+ 239         res20  Initial concentration in Reservoir 2 in 2020 (GtC)      /39.534  /
+ 240         res30  Initial concentration in Reservoir 3 in 2020 (GtC)      / 6.1865 /
+ 241   
+ 242   
+ 243   
+ 244         mateq      Equilibrium concentration atmosphere  (GtC)            /588   /
+ 245         tbox10    Initial temperature box 1 change in 2020 (C from 1765)  /0.1477  /
+ 246         tbox20    Initial temperature box 2 change in 2020 (C from 1765)  /1.099454/
+ 247         tatm0     Initial atmospheric temperature change in 2020          /1.24715 /
+ 248   
+ 249  ;
+ 250  VARIABLES
+ 251  *Note: Stock variables correspond to levels at the END of the period
+ 252          FORC(t)        Increase in radiative forcing (watts per m2 from 1765)
+ 253          TATM(t)        Increase temperature of atmosphere (degrees C from 1765)
+ 254          TBOX1(t)       Increase temperature of box 1 (degrees C from 1765)
+ 255          TBOX2(t)       Increase temperature of box 2 (degrees C from 1765)
+ 256          RES0(t)        Carbon concentration in Reservoir 0 (GtC from 1765)
+ 257          RES1(t)        Carbon concentration in Reservoir 1 (GtC from 1765)
+ 258          RES2(t)        Carbon concentration in Reservoir 2 (GtC from 1765)
+ 259          RES3(t)        Carbon concentration in Reservoir 3 (GtC from 1765)
+ 260          MAT(t)         Carbon concentration increase in atmosphere (GtC from 1765)
+ 261          CACC(t)        Accumulated carbon in ocean and other sinks (GtC)
+ 262          IRFt(t)        IRF100 at time t
+ 263          alpha(t)       Carbon decay time scaling factor
+ 264          SumAlpha      Placeholder variable for objective function;
+ 265   
+ 266  **** IMPORTANT PROGRAMMING NOTE. Earlier implementations has reservoirs as non-negative.
+ 267  **** However, these are not physical but mathematical solutions.
+ 268  **** So, they need to be unconstrained so that can have negative emissions.
+ 269  NONNEGATIVE VARIABLES   TATM, MAT,  IRFt, alpha
+ 270   
+ 271  EQUATIONS
+ 272          FORCE(t)        Radiative forcing equation
+ 273          RES0LOM(t)      Reservoir 0 law of motion
+ 274          RES1LOM(t)      Reservoir 1 law of motion
+ 275          RES2LOM(t)      Reservoir 2 law of motion
+ 276          RES3LOM(t)      Reservoir 3 law of motion
+ 277          MMAT(t)         Atmospheric concentration equation
+ 278          Cacceq(t)       Accumulated carbon in sinks equation
+ 279          TATMEQ(t)       Temperature-climate equation for atmosphere
+ 280          TBOX1EQ(t)      Temperature box 1 law of motion
+ 281          TBOX2EQ(t)      Temperature box 2 law of motion
+ 282          IRFeqLHS(t)     Left-hand side of IRF100 equation
+ 283          IRFeqRHS(t)     Right-hand side of IRF100 equation
+ 284  ;
+ 285  ** Equations of the model
+ 286      res0lom(t+1)..   RES0(t+1) =E=  (emshare0*tau0*alpha(t+1)*(Eco2(t+1)/3.667))*(1-exp(-tstep/(tau0*alpha(t+1))))+Res0(t)*exp(-tstep/(tau0*alpha(t+1)));
+ 287      res1lom(t+1)..   RES1(t+1) =E=  (emshare1*tau1*alpha(t+1)*(Eco2(t+1)/3.667))*(1-exp(-tstep/(tau1*alpha(t+1))))+Res1(t)*exp(-tstep/(tau1*alpha(t+1)));
+ 288      res2lom(t+1)..   RES2(t+1) =E=  (emshare2*tau2*alpha(t+1)*(Eco2(t+1)/3.667))*(1-exp(-tstep/(tau2*alpha(t+1))))+Res2(t)*exp(-tstep/(tau2*alpha(t+1)));
+ 289      res3lom(t+1)..   RES3(t+1) =E=  (emshare3*tau3*alpha(t+1)*(Eco2(t+1)/3.667))*(1-exp(-tstep/(tau3*alpha(t+1))))+Res3(t)*exp(-tstep/(tau3*alpha(t+1)));
+ 290      mmat(t+1)..      MAT(t+1)  =E=   mateq+Res0(t+1)+Res1(t+1)+Res2(t+1)+Res3(t+1);
+ 291      cacceq(t)..      Cacc(t)   =E=  (CCATOT(t)-(MAT(t)-mateq));
+ 292      force(t)..       FORC(t)    =E=  fco22x*((log((MAT(t)/mateq))/log(2))) + F_Misc(t)+F_GHGabate(t);
+ 293   
+ 294      tbox1eq(t+1)..   Tbox1(t+1) =E=  Tbox1(t)*exp(-tstep/d1)+teq1*Forc(t+1)*(1-exp(-tstep/d1));
+ 295      tbox2eq(t+1)..   Tbox2(t+1) =E=  Tbox2(t)*exp(-tstep/d2)+teq2*Forc(t+1)*(1-exp(-tstep/d2));
+ 296      tatmeq(t+1)..    TATM(t+1)  =E=   Tbox1(t+1)+Tbox2(t+1);
+ 297      irfeqlhs(t)..    IRFt(t)   =E=  ((alpha(t)*emshare0*tau0*(1-exp(-100/(alpha(t)*tau0))))+(alpha(t)*emshare1*tau1*(1-exp(-100/(alpha(t)*tau1))))+(alpha(t)*emshare2*tau2*(1-exp(-100/(alpha(t)*tau2))))+(alpha(t)*emshare3*tau3*(1-exp(-100/(alpha(t)*tau3)))));
+ 298      irfeqrhs(t)..    IRFt(t)   =E=  irf0+irC*Cacc(t)+irT*TATM(t);
+ 299   
+ 300  **  Upper and lower bounds for stability
+ 301  MAT.LO(t)       = 10;
+ 302  TATM.UP(t)      = 20;
+ 303  TATM.lo(t)      = .5;
+ 304  alpha.up(t) = 100;
+ 305  alpha.lo(t) = 0.1;
+ 306   
+ 307  * Initial conditions
+ 308  MAT.FX(tfirst)    = mat0;
+ 309  TATM.FX(tfirst)   = tatm0;
+ 310  Res0.fx(tfirst) = Res00;
+ 311  Res1.fx(tfirst) = Res10;
+ 312  Res2.fx(tfirst) = Res20;
+ 313  Res3.fx(tfirst) = Res30;
+ 314  Tbox1.fx(tfirst) = Tbox10;
+ 315  Tbox2.fx(tfirst) = Tbox20;
+ 316   
+ 317  ** Solution options
+ 318  option iterlim = 99900;
+ 319  option reslim = 99999;
+ 320  option solprint = on;
+ 321  option limrow = 0;
+ 322  option limcol = 0;
+ 323   
+ 324   
+ 325  **** Equations of the model
+ 326  **Emissions and Damages
+ 327   eco2eq(t)..          ECO2(t)        =E= (sigma(t)*YGROSS(t) + eland(t))*(1-(MIU(t)));
+ 328   eindeq(t)..          EIND(t)        =E= (sigma(t)*YGROSS(t))*(1-(MIU(t)));
+ 329   eco2Eeq(t)..         ECO2E(t)       =E= (sigma(t)*YGROSS(t) + eland(t) + CO2E_GHGabateB(t))*(1-(MIU(t)));
+ 330   F_GHGabateEQ(t+1)..  F_GHGabate(t+1) =E= Fcoef2*F_GHGabate(t)+ Fcoef1*CO2E_GHGabateB(t)*(1-(MIU(t)));
+ 331   ccatoteq(t+1)..      CCATOT(t+1)    =E= CCATOT(t) +  ECO2(T)*(5/3.666) ;
+ 332   damfraceq(t) ..      DAMFRAC(t)     =E= (a1*(TATM(t)))+(a2base*(TATM(t))**a3) ;
+ 333   dameq(t)..           DAMAGES(t)     =E= YGROSS(t) * DAMFRAC(t);
+ 334   abateeq(T)..         ABATECOST(T)   =E= YGROSS(T) * COST1TOT(T) * (MIU(T)**EXPCOST2);
+ 335   mcabateeq(t)..       MCABATE(t)     =E= pbacktime(t) * MIU(t)**(expcost2-1);
+ 336   carbpriceeq(t)..     CPRICE(t)      =E= pbacktime(t) * (MIU(t))**(expcost2-1);
+ 337  **Economic variables
+ 338   ygrosseq(t)..        YGROSS(t)      =E= (AL(t)*(L(t)/1000)**(1-gama))*(K(t)**gama);
+ 339   yneteq(t)..          YNET(t)        =E= YGROSS(t)*(1-damfrac(t));
+ 340   yy(t)..              Y(t)           =E= YNET(t) - ABATECOST(t);
+ 341   cc(t)..              C(t)           =E= Y(t) - I(t);
+ 342   cpce(t)..            CPC(t)         =E= 1000 * C(t) / L(t);
+ 343   seq(t)..             I(t)           =E= S(t) * Y(t);
+ 344   kk(t+1)..            K(t+1)         =L= (1-dk)**tstep * K(t) + tstep * I(t);
+ 345   RFACTLONGeq(t+1)..   RFACTLONG(t+1) =E= SRF*(cpc(t+1)/cpc('1'))**(-elasmu)*rr(t+1);
+ 346   RLONGeq(t+1)..       RLONG(t+1)     =E= -log(RFACTLONG(t+1)/SRF)/(5*t.val);
+ 347   RSHORTeq(t+1)..      RSHORT(t+1)    =E= -log(RFACTLONG(t+1)/Rfactlong(t))/5;
+ 348  ** Welfare functions
+ 349   periodueq(t)..       PERIODU(t)     =E= ((C(T)*1000/L(T))**(1-elasmu)-1)/(1-elasmu)-1;
+ 350   totperiodueq(t)..    TOTPERIODU(t)  =E= PERIODU(t) * L(t) * RR(t);
+ 351   utileq..             UTILITY        =E= tstep * scale1 * sum(t,  TOTPERIODU(t)) + scale2;
+ 352   
+ 353  * Various control rate limits, initial and terminal conditions
+ 354  miu.up(t)       = miuup(t);
+ 355  K.LO(t)         = 1;
+ 356  C.LO(t)         = 2;
+ 357  CPC.LO(t)       = .01;
+ 358  RFACTLONG.lo(t) =.0001;
+ 359  *set lag10(t) ;
+ 360  *lag10(t)                =  yes$(t.val gt card(t)-10);
+ 361  *S.FX(lag10(t))          = optlrsav;
+ 362  s.fx(t)$(t.val > 37)    =.28;
+ 363  ccatot.fx(tfirst)       = CumEmiss0;
+ 364  K.FX(tfirst)            = k0;
+ 365  F_GHGabate.fx(tfirst)   = F_GHGabate2020;
+ 366  RFACTLONG.fx(tfirst)    = 1000000;
+ 367   
+ 368  ** Solution options
+ 369  option iterlim = 99900; option reslim = 99999; option solprint = on; option limrow = 0; option limcol = 0;
+ 370   
+ 371  ** Initial solution
+ 372  model  CO2 /all/;
+ 373  ifopt=1;
+ 374  solve CO2 maximizing UTILITY using nlp ;
+ 375   
+ 376  **** STATEMENTS FOR DEFINITIONS AND PUT STATEMENTS FOR MAJOR SCENARIOS
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/Putlong-4-3-10.gms
+ 378  *OPTIMAL
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-opt-b-4-3-10.gms
+ 380  * Solve equations for optimal case
+ 381   
+ 382  ifopt=1;
+ 383   
+ 384  * Solve
+ 385  solve CO2 maximizing UTILITY using nlp ;
+ 386  solve CO2 maximizing UTILITY using nlp ;
+ 387  solve CO2 maximizing UTILITY using nlp ;
+ 388   
+ 389  *Post-Solution Parameter-Assignment
+ 390   
+ 391  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+ 392  ppm(t)    = mat.l(t)/2.13;
+ 393  abaterat(t) = abatecost.l(t)/y.l(t);
+ 394  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+ 395  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+ 396  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-b-4-3-10.gms
+ 398   
+ 399   
+ 400  file resLARGE2023 /DICE2023-b-4-3-10.csv/; resLARGE2023.nd = 10 ; resLARGE2023.nw = 0 ; resLARGE2023.pw=20000; resLARGE2023.pc=5;
+ 401  put resLARGE2023;
+ 402  put /"Results of DICE2023-b-4-3-10.csv: October 16, 2023";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-opt-b-4-3-10.gms
+ 404   
+ 405   
+ 406  put /"SCENARIO: OPTIMAL"
+ 407  put /"Results of DICE2023-opt-b-4-3-10";
+ 408  put /"OPTIMAL";
+ 409   
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+ 411  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+ 412   
+ 413  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+ 414  put /"ifopt =" ifopt;
+ 415  put // "Period";
+ 416  Loop (T, put T.val);
+ 417  put / "Year" ;
+ 418   
+ 419  Parameters
+ 420  gpccons(t)
+ 421  growthAL(t)
+ 422  drshort(t) ;
+ 423  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+ 424  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+ 425  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+ 426   
+ 427  Loop (T, put (2015+(TSTEP*T.val) ));
+ 428  put / "Objective function (2019$)" ;
+ 429  put utility.l;
+ 430  put / "Industrial CO2 GtCO2/yr" ;
+ 431  Loop (T, put EIND.l(T));
+ 432  put / "Atmospheric concentration C (ppm)" ;
+ 433  Loop (T, put (MAT.l(T)/2.13));
+ 434  put / "Atmospheric concentrations GtC" ;
+ 435  Loop (T, put mat.l(t));
+ 436  put / "Atmospheric temperaturer (deg c above preind) " ;
+ 437  Loop (T, put TATM.l(T));
+ 438  put / "Total forcings w/m2" ;
+ 439  Loop (T, put forc.l(t));
+ 440  put / "Forcings, exogenous w/m2" ;
+ 441  Loop (T, put F_Misc(t) );
+ 442  put / "CO2 forcings w/m2" ;
+ 443  Loop (T, put FORC_CO2(t) );
+ 444  put / "Actual other abatable GHG forcings w/m2" ;
+ 445  Loop (T, put F_GHGabate.L(t) );
+ 446   
+ 447  put / "Carbon price (2019 $ per t CO2)" ;
+ 448  Loop (T, put cprice.l(T));
+ 449  put / "Emissions control rate" ;
+ 450  Loop (T, put MIU.l(T));
+ 451  put / "Social cost of carbon $/tCO2" ;
+ 452  scc('1')=scc('2')*.85;
+ 453  Loop (T, put scc(T));
+ 454   
+ 455  put / "Output, net net trill 2019$" ;
+ 456  Loop (T, put Y.l(T));
+ 457  put / "Short Interest rate, %/yr" ;
+ 458  Loop (T, put Rshort.l(T));
+ 459  put / "Population" ;
+ 460  Loop (T, put L(T));
+ 461  put / "TFP" ;
+ 462  Loop (T, put AL(T));
+ 463  put / "Output, gross-gross, 2019$" ;
+ 464  Loop (T, put YGROSS.L(t));
+ 465  put / "Change TFP, %/year" ;
+ 466  Loop (T, put ga(t));
+ 467  put / "Capital stock, 2019$" ;
+ 468  Loop (T, put k.l(t));
+ 469   put / "Savings rate, fraction gross output" ;
+ 470  Loop (T, put s.l(t));
+ 471  put / "Gross investment, 2019$" ;
+ 472  Loop (T, put I.l(t));
+ 473  put / "Y gross-net, 2019$" ;
+ 474  Loop (T, put ynet.l(t));
+ 475  put / "Consumption per capita, 2019$ " ;
+ 476  Loop (T, put CPC.l(T));
+ 477  put / "Consumption" ;
+ 478  Loop (T, put C.l(t));
+ 479   
+ 480  put / "Climate damages, fraction of output" ;
+ 481  Loop (T, put DAMFRAC.l(T));
+ 482  put / "Damages, 2019$" ;
+ 483  Loop (T, put damages.l(t));
+ 484  put / "Abatement, 2019$" ;
+ 485  Loop (T, put abatecost.l(t));
+ 486  put / "Abatement/0utput" ;
+ 487  Loop (T, put  abaterat(t) );
+ 488  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+ 489  Loop (T, put sigma(t));
+ 490  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+ 491  Loop (T, put sigmaTOT(t));
+ 492  put / "Cost, backstop technology ($/tCO2)" ;
+ 493  Loop (T, put pbacktime(T));
+ 494  put / "Total CO2 Emissions, GTCO2/year" ;
+ 495  Loop (T, put Eco2.l(T));
+ 496  put / "Total CO2e Emissions, GTCO2-E/year" ;
+ 497  Loop (T, put Eco2e.l(T));
+ 498  put / "Industrial CO2 Emissions, GTCO2/year" ;
+ 499  Loop (T, put EIND.l(T));
+ 500  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+ 501  Loop (T, put CO2E_GHGabateB(t));
+ 502  put / "Land emissions, GtCO2/year" ;
+ 503  Loop (T, put eland(t));
+ 504  put / "Cumulative CO2 emissions, GtC " ;
+ 505  Loop (T, put ccatot.l(t));
+ 506  put / "Atmospheric fraction CO2 since 1765 " ;
+ 507  Loop (T, put  atfrac1765(t) );
+ 508  put / "Atmospheric fraction CO2 since 2020 " ;
+ 509  Loop (T, put  atfrac2020(t) );
+ 510   
+ 511  put / "Permanent C box"
+ 512  Loop (T, put res0.L(t) );
+ 513  put / "Slow C box"
+ 514  Loop (T, put res1.L(t)   );
+ 515  put / "Medium C box"
+ 516  Loop (T, put res2.L(t)  );
+ 517  put / "Fast C box"
+ 518  Loop (T, put res3.L(t) );
+ 519  put / "Temp Box 1"
+ 520  Loop (T, put TBOX1.L(t) );
+ 521  put / "Temp Box 2"
+ 522  Loop (T, put TBOX2.L(t) );
+ 523   
+ 524  put / "Alpha"
+ 525  Loop (T, put alpha.L(t)  );
+ 526  put / "IFR"
+ 527  Loop (T, put irft.L(t) );
+ 528  put / "cacc"
+ 529  Loop (T, put cacc.L(t) );
+ 530  put / "ccatot"
+ 531  Loop (T, put ccatot.L(t) );
+ 532  put / "Share of output net zero emissions"
+ 533  Loop (T, put cost1tot(t) );
+ 534  put / "Growth p.c. cons (log)"
+ 535  Loop (T, put gpccons(t) );
+ 536  put / "Change interest rate"
+ 537  Loop (T, put drshort(t) );
+ 538  put / "Precautionary effect"
+ 539  Loop (T, put (rprecaut(t)) );
+ 540  put / "Long interest rate(%)"
+ 541  Loop (T, put (rlong.l(t)) );
+ 542  put / "RR1"
+ 543  Loop (T, put (rr1(t)) );
+ 544  put / "RR"
+ 545  Loop (T, put (rr(t)) );
+ 546   
+ 547   
+ 548  put / "Variance pc cons"
+ 549  Loop (T, put (varpcc(t))) ;
+ 550  put / "Growth TFP"
+ 551  Loop (T, put (growthAL(t+1))) ;
+ 552   
+ 553   
+ 554   
+ 555   
+ 556   
+ 557   
+ 558   
+ 559   
+ 560  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+ 561   
+ 562  put "   emshare3        ="      emshare3        ;
+ 563  put "   tau0    ="      tau0    ;
+ 564  put "   tau1    ="      tau1    ;
+ 565  put "   tau2    ="      tau2    ;
+ 566  put "   tau3    ="      tau3    ;
+ 567  put "   teq1    ="      teq1    ;
+ 568  put "   teq2    ="      teq2    ;
+ 569  put "   d1      ="      d1      ;
+ 570  put "   d2      ="      d2      ;
+ 571  put "IRF0       ="      irf0;
+ 572  put "   irC     ="      irC     ;
+ 573  put "   irT     ="      irT     ;
+ 574  put /"  fco22x  ="      fco22x  ;
+ 575  put "   mat0    ="      mat0    ;
+ 576  put "   res00   ="      res00   ;
+ 577  put "   res10   ="      res10   ;
+ 578  put "   res20   ="      res20   ;
+ 579  put "   res30   ="      res30   ;
+ 580  put "   mateq   ="      mateq   ;
+ 581  put "   tbox10  ="      tbox10  ;
+ 582  put "   tbox20  ="      tbox20  ;
+ 583  put "   tatm0   ="      tatm0   ;
+ 584   
+ 585  put /"  a2      ="      a2base      ;
+ 586   
+ 587  put "   elasmu  ="      elasmu  ;
+ 588  put "   prstp   ="      prstp   ;
+ 589  put "gsigma1            ="      gsigma1         ;
+ 590  put "    e1     ="        e1    ;
+ 591  put "expcost2           ="       expcost2       ;
+ 592  put "   gback   ="       gback  ;
+ 593  put "   limmiu2050      ="       limmiu2070     ;
+ 594  put "   limmiu2100      ="      limmiu2120      ;
+ 595  put "   cprice1         ="       cprice1        ;
+ 596  put "   gcprice         ="   gcprice  ;
+ 597  put /;
+ 598   
+ 599  * 2 DEGREE LIMIT
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-T2-b-4-3-1.gms
+ 601  * Revised temperature for preindustiral
+ 602  * For def-T2-b-4-3-1
+ 603   
+ 604  ifopt=1;
+ 605   
+ 606  tatm.up(t)=2.0;
+ 607   
+ 608   
+ 609  * Solve
+ 610  solve CO2 maximizing UTILITY using nlp ;
+ 611  solve CO2 maximizing UTILITY using nlp ;
+ 612  solve CO2 maximizing UTILITY using nlp ;
+ 613   
+ 614  *Post-Solution Parameter-Assignment
+ 615   
+ 616  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+ 617  ppm(t)    = mat.l(t)/2.13;
+ 618  abaterat(t) = abatecost.l(t)/y.l(t);
+ 619  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+ 620  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+ 621  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+ 622   
+ 623  tatm.up(t)=15;
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-T2-b-4-3-1.gms
+ 625  put /"SCENARIO: T < 2%"
+ 626  put /"Results of DICE2023-opt-b-4-3-1";
+ 627  put /"Temp limit 2.0";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+ 629  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+ 630   
+ 631  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+ 632  put /"ifopt =" ifopt;
+ 633  put // "Period";
+ 634  Loop (T, put T.val);
+ 635  put / "Year" ;
+ 636   
+ 637  Parameters
+ 638  gpccons(t)
+ 639  growthAL(t)
+ 640  drshort(t) ;
+ 641  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+ 642  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+ 643  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+ 644   
+ 645  Loop (T, put (2015+(TSTEP*T.val) ));
+ 646  put / "Objective function (2019$)" ;
+ 647  put utility.l;
+ 648  put / "Industrial CO2 GtCO2/yr" ;
+ 649  Loop (T, put EIND.l(T));
+ 650  put / "Atmospheric concentration C (ppm)" ;
+ 651  Loop (T, put (MAT.l(T)/2.13));
+ 652  put / "Atmospheric concentrations GtC" ;
+ 653  Loop (T, put mat.l(t));
+ 654  put / "Atmospheric temperaturer (deg c above preind) " ;
+ 655  Loop (T, put TATM.l(T));
+ 656  put / "Total forcings w/m2" ;
+ 657  Loop (T, put forc.l(t));
+ 658  put / "Forcings, exogenous w/m2" ;
+ 659  Loop (T, put F_Misc(t) );
+ 660  put / "CO2 forcings w/m2" ;
+ 661  Loop (T, put FORC_CO2(t) );
+ 662  put / "Actual other abatable GHG forcings w/m2" ;
+ 663  Loop (T, put F_GHGabate.L(t) );
+ 664   
+ 665  put / "Carbon price (2019 $ per t CO2)" ;
+ 666  Loop (T, put cprice.l(T));
+ 667  put / "Emissions control rate" ;
+ 668  Loop (T, put MIU.l(T));
+ 669  put / "Social cost of carbon $/tCO2" ;
+ 670  scc('1')=scc('2')*.85;
+ 671  Loop (T, put scc(T));
+ 672   
+ 673  put / "Output, net net trill 2019$" ;
+ 674  Loop (T, put Y.l(T));
+ 675  put / "Short Interest rate, %/yr" ;
+ 676  Loop (T, put Rshort.l(T));
+ 677  put / "Population" ;
+ 678  Loop (T, put L(T));
+ 679  put / "TFP" ;
+ 680  Loop (T, put AL(T));
+ 681  put / "Output, gross-gross, 2019$" ;
+ 682  Loop (T, put YGROSS.L(t));
+ 683  put / "Change TFP, %/year" ;
+ 684  Loop (T, put ga(t));
+ 685  put / "Capital stock, 2019$" ;
+ 686  Loop (T, put k.l(t));
+ 687   put / "Savings rate, fraction gross output" ;
+ 688  Loop (T, put s.l(t));
+ 689  put / "Gross investment, 2019$" ;
+ 690  Loop (T, put I.l(t));
+ 691  put / "Y gross-net, 2019$" ;
+ 692  Loop (T, put ynet.l(t));
+ 693  put / "Consumption per capita, 2019$ " ;
+ 694  Loop (T, put CPC.l(T));
+ 695  put / "Consumption" ;
+ 696  Loop (T, put C.l(t));
+ 697   
+ 698  put / "Climate damages, fraction of output" ;
+ 699  Loop (T, put DAMFRAC.l(T));
+ 700  put / "Damages, 2019$" ;
+ 701  Loop (T, put damages.l(t));
+ 702  put / "Abatement, 2019$" ;
+ 703  Loop (T, put abatecost.l(t));
+ 704  put / "Abatement/0utput" ;
+ 705  Loop (T, put  abaterat(t) );
+ 706  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+ 707  Loop (T, put sigma(t));
+ 708  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+ 709  Loop (T, put sigmaTOT(t));
+ 710  put / "Cost, backstop technology ($/tCO2)" ;
+ 711  Loop (T, put pbacktime(T));
+ 712  put / "Total CO2 Emissions, GTCO2/year" ;
+ 713  Loop (T, put Eco2.l(T));
+ 714  put / "Total CO2e Emissions, GTCO2-E/year" ;
+ 715  Loop (T, put Eco2e.l(T));
+ 716  put / "Industrial CO2 Emissions, GTCO2/year" ;
+ 717  Loop (T, put EIND.l(T));
+ 718  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+ 719  Loop (T, put CO2E_GHGabateB(t));
+ 720  put / "Land emissions, GtCO2/year" ;
+ 721  Loop (T, put eland(t));
+ 722  put / "Cumulative CO2 emissions, GtC " ;
+ 723  Loop (T, put ccatot.l(t));
+ 724  put / "Atmospheric fraction CO2 since 1765 " ;
+ 725  Loop (T, put  atfrac1765(t) );
+ 726  put / "Atmospheric fraction CO2 since 2020 " ;
+ 727  Loop (T, put  atfrac2020(t) );
+ 728   
+ 729  put / "Permanent C box"
+ 730  Loop (T, put res0.L(t) );
+ 731  put / "Slow C box"
+ 732  Loop (T, put res1.L(t)   );
+ 733  put / "Medium C box"
+ 734  Loop (T, put res2.L(t)  );
+ 735  put / "Fast C box"
+ 736  Loop (T, put res3.L(t) );
+ 737  put / "Temp Box 1"
+ 738  Loop (T, put TBOX1.L(t) );
+ 739  put / "Temp Box 2"
+ 740  Loop (T, put TBOX2.L(t) );
+ 741   
+ 742  put / "Alpha"
+ 743  Loop (T, put alpha.L(t)  );
+ 744  put / "IFR"
+ 745  Loop (T, put irft.L(t) );
+ 746  put / "cacc"
+ 747  Loop (T, put cacc.L(t) );
+ 748  put / "ccatot"
+ 749  Loop (T, put ccatot.L(t) );
+ 750  put / "Share of output net zero emissions"
+ 751  Loop (T, put cost1tot(t) );
+ 752  put / "Growth p.c. cons (log)"
+ 753  Loop (T, put gpccons(t) );
+ 754  put / "Change interest rate"
+ 755  Loop (T, put drshort(t) );
+ 756  put / "Precautionary effect"
+ 757  Loop (T, put (rprecaut(t)) );
+ 758  put / "Long interest rate(%)"
+ 759  Loop (T, put (rlong.l(t)) );
+ 760  put / "RR1"
+ 761  Loop (T, put (rr1(t)) );
+ 762  put / "RR"
+ 763  Loop (T, put (rr(t)) );
+ 764   
+ 765   
+ 766  put / "Variance pc cons"
+ 767  Loop (T, put (varpcc(t))) ;
+ 768  put / "Growth TFP"
+ 769  Loop (T, put (growthAL(t+1))) ;
+ 770   
+ 771   
+ 772   
+ 773   
+ 774   
+ 775   
+ 776   
+ 777   
+ 778  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+ 779   
+ 780  put "   emshare3        ="      emshare3        ;
+ 781  put "   tau0    ="      tau0    ;
+ 782  put "   tau1    ="      tau1    ;
+ 783  put "   tau2    ="      tau2    ;
+ 784  put "   tau3    ="      tau3    ;
+ 785  put "   teq1    ="      teq1    ;
+ 786  put "   teq2    ="      teq2    ;
+ 787  put "   d1      ="      d1      ;
+ 788  put "   d2      ="      d2      ;
+ 789  put "IRF0       ="      irf0;
+ 790  put "   irC     ="      irC     ;
+ 791  put "   irT     ="      irT     ;
+ 792  put /"  fco22x  ="      fco22x  ;
+ 793  put "   mat0    ="      mat0    ;
+ 794  put "   res00   ="      res00   ;
+ 795  put "   res10   ="      res10   ;
+ 796  put "   res20   ="      res20   ;
+ 797  put "   res30   ="      res30   ;
+ 798  put "   mateq   ="      mateq   ;
+ 799  put "   tbox10  ="      tbox10  ;
+ 800  put "   tbox20  ="      tbox20  ;
+ 801  put "   tatm0   ="      tatm0   ;
+ 802   
+ 803  put /"  a2      ="      a2base      ;
+ 804   
+ 805  put "   elasmu  ="      elasmu  ;
+ 806  put "   prstp   ="      prstp   ;
+ 807  put "gsigma1            ="      gsigma1         ;
+ 808  put "    e1     ="        e1    ;
+ 809  put "expcost2           ="       expcost2       ;
+ 810  put "   gback   ="       gback  ;
+ 811  put "   limmiu2050      ="       limmiu2070     ;
+ 812  put "   limmiu2100      ="      limmiu2120      ;
+ 813  put "   cprice1         ="       cprice1        ;
+ 814  put "   gcprice         ="   gcprice  ;
+ 815  put /;
+ 816   
+ 817  * 1.5 DEGREE LIMIT
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-T15-b-4-3-1.gms
+ 819  * Revised temperature for preindustiral
+ 820  * For def-T2-b-4-3-1
+ 821   
+ 822  ifopt=1;
+ 823   
+ 824  tatm.up(t)=1.5;
+ 825   
+ 826   
+ 827   
+ 828  * Solve
+ 829  solve CO2 maximizing UTILITY using nlp ;
+ 830  solve CO2 maximizing UTILITY using nlp ;
+ 831  solve CO2 maximizing UTILITY using nlp ;
+ 832   
+ 833  *Post-Solution Parameter-Assignment
+ 834   
+ 835  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+ 836  ppm(t)    = mat.l(t)/2.13;
+ 837  abaterat(t) = abatecost.l(t)/y.l(t);
+ 838  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+ 839  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+ 840  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+ 841  tatm.up(t)=10;
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-T15-b-4-3-1.gms
+ 843  put /"SCENARIO: T < 1.5"
+ 844  put /"Results of DICE2023-opt-b-4-3-1";
+ 845  put /"Temp limit 1.5";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+ 847  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+ 848   
+ 849  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+ 850  put /"ifopt =" ifopt;
+ 851  put // "Period";
+ 852  Loop (T, put T.val);
+ 853  put / "Year" ;
+ 854   
+ 855  Parameters
+ 856  gpccons(t)
+ 857  growthAL(t)
+ 858  drshort(t) ;
+ 859  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+ 860  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+ 861  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+ 862   
+ 863  Loop (T, put (2015+(TSTEP*T.val) ));
+ 864  put / "Objective function (2019$)" ;
+ 865  put utility.l;
+ 866  put / "Industrial CO2 GtCO2/yr" ;
+ 867  Loop (T, put EIND.l(T));
+ 868  put / "Atmospheric concentration C (ppm)" ;
+ 869  Loop (T, put (MAT.l(T)/2.13));
+ 870  put / "Atmospheric concentrations GtC" ;
+ 871  Loop (T, put mat.l(t));
+ 872  put / "Atmospheric temperaturer (deg c above preind) " ;
+ 873  Loop (T, put TATM.l(T));
+ 874  put / "Total forcings w/m2" ;
+ 875  Loop (T, put forc.l(t));
+ 876  put / "Forcings, exogenous w/m2" ;
+ 877  Loop (T, put F_Misc(t) );
+ 878  put / "CO2 forcings w/m2" ;
+ 879  Loop (T, put FORC_CO2(t) );
+ 880  put / "Actual other abatable GHG forcings w/m2" ;
+ 881  Loop (T, put F_GHGabate.L(t) );
+ 882   
+ 883  put / "Carbon price (2019 $ per t CO2)" ;
+ 884  Loop (T, put cprice.l(T));
+ 885  put / "Emissions control rate" ;
+ 886  Loop (T, put MIU.l(T));
+ 887  put / "Social cost of carbon $/tCO2" ;
+ 888  scc('1')=scc('2')*.85;
+ 889  Loop (T, put scc(T));
+ 890   
+ 891  put / "Output, net net trill 2019$" ;
+ 892  Loop (T, put Y.l(T));
+ 893  put / "Short Interest rate, %/yr" ;
+ 894  Loop (T, put Rshort.l(T));
+ 895  put / "Population" ;
+ 896  Loop (T, put L(T));
+ 897  put / "TFP" ;
+ 898  Loop (T, put AL(T));
+ 899  put / "Output, gross-gross, 2019$" ;
+ 900  Loop (T, put YGROSS.L(t));
+ 901  put / "Change TFP, %/year" ;
+ 902  Loop (T, put ga(t));
+ 903  put / "Capital stock, 2019$" ;
+ 904  Loop (T, put k.l(t));
+ 905   put / "Savings rate, fraction gross output" ;
+ 906  Loop (T, put s.l(t));
+ 907  put / "Gross investment, 2019$" ;
+ 908  Loop (T, put I.l(t));
+ 909  put / "Y gross-net, 2019$" ;
+ 910  Loop (T, put ynet.l(t));
+ 911  put / "Consumption per capita, 2019$ " ;
+ 912  Loop (T, put CPC.l(T));
+ 913  put / "Consumption" ;
+ 914  Loop (T, put C.l(t));
+ 915   
+ 916  put / "Climate damages, fraction of output" ;
+ 917  Loop (T, put DAMFRAC.l(T));
+ 918  put / "Damages, 2019$" ;
+ 919  Loop (T, put damages.l(t));
+ 920  put / "Abatement, 2019$" ;
+ 921  Loop (T, put abatecost.l(t));
+ 922  put / "Abatement/0utput" ;
+ 923  Loop (T, put  abaterat(t) );
+ 924  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+ 925  Loop (T, put sigma(t));
+ 926  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+ 927  Loop (T, put sigmaTOT(t));
+ 928  put / "Cost, backstop technology ($/tCO2)" ;
+ 929  Loop (T, put pbacktime(T));
+ 930  put / "Total CO2 Emissions, GTCO2/year" ;
+ 931  Loop (T, put Eco2.l(T));
+ 932  put / "Total CO2e Emissions, GTCO2-E/year" ;
+ 933  Loop (T, put Eco2e.l(T));
+ 934  put / "Industrial CO2 Emissions, GTCO2/year" ;
+ 935  Loop (T, put EIND.l(T));
+ 936  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+ 937  Loop (T, put CO2E_GHGabateB(t));
+ 938  put / "Land emissions, GtCO2/year" ;
+ 939  Loop (T, put eland(t));
+ 940  put / "Cumulative CO2 emissions, GtC " ;
+ 941  Loop (T, put ccatot.l(t));
+ 942  put / "Atmospheric fraction CO2 since 1765 " ;
+ 943  Loop (T, put  atfrac1765(t) );
+ 944  put / "Atmospheric fraction CO2 since 2020 " ;
+ 945  Loop (T, put  atfrac2020(t) );
+ 946   
+ 947  put / "Permanent C box"
+ 948  Loop (T, put res0.L(t) );
+ 949  put / "Slow C box"
+ 950  Loop (T, put res1.L(t)   );
+ 951  put / "Medium C box"
+ 952  Loop (T, put res2.L(t)  );
+ 953  put / "Fast C box"
+ 954  Loop (T, put res3.L(t) );
+ 955  put / "Temp Box 1"
+ 956  Loop (T, put TBOX1.L(t) );
+ 957  put / "Temp Box 2"
+ 958  Loop (T, put TBOX2.L(t) );
+ 959   
+ 960  put / "Alpha"
+ 961  Loop (T, put alpha.L(t)  );
+ 962  put / "IFR"
+ 963  Loop (T, put irft.L(t) );
+ 964  put / "cacc"
+ 965  Loop (T, put cacc.L(t) );
+ 966  put / "ccatot"
+ 967  Loop (T, put ccatot.L(t) );
+ 968  put / "Share of output net zero emissions"
+ 969  Loop (T, put cost1tot(t) );
+ 970  put / "Growth p.c. cons (log)"
+ 971  Loop (T, put gpccons(t) );
+ 972  put / "Change interest rate"
+ 973  Loop (T, put drshort(t) );
+ 974  put / "Precautionary effect"
+ 975  Loop (T, put (rprecaut(t)) );
+ 976  put / "Long interest rate(%)"
+ 977  Loop (T, put (rlong.l(t)) );
+ 978  put / "RR1"
+ 979  Loop (T, put (rr1(t)) );
+ 980  put / "RR"
+ 981  Loop (T, put (rr(t)) );
+ 982   
+ 983   
+ 984  put / "Variance pc cons"
+ 985  Loop (T, put (varpcc(t))) ;
+ 986  put / "Growth TFP"
+ 987  Loop (T, put (growthAL(t+1))) ;
+ 988   
+ 989   
+ 990   
+ 991   
+ 992   
+ 993   
+ 994   
+ 995   
+ 996  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+ 997   
+ 998  put "   emshare3        ="      emshare3        ;
+ 999  put "   tau0    ="      tau0    ;
+1000  put "   tau1    ="      tau1    ;
+1001  put "   tau2    ="      tau2    ;
+1002  put "   tau3    ="      tau3    ;
+1003  put "   teq1    ="      teq1    ;
+1004  put "   teq2    ="      teq2    ;
+1005  put "   d1      ="      d1      ;
+1006  put "   d2      ="      d2      ;
+1007  put "IRF0       ="      irf0;
+1008  put "   irC     ="      irC     ;
+1009  put "   irT     ="      irT     ;
+1010  put /"  fco22x  ="      fco22x  ;
+1011  put "   mat0    ="      mat0    ;
+1012  put "   res00   ="      res00   ;
+1013  put "   res10   ="      res10   ;
+1014  put "   res20   ="      res20   ;
+1015  put "   res30   ="      res30   ;
+1016  put "   mateq   ="      mateq   ;
+1017  put "   tbox10  ="      tbox10  ;
+1018  put "   tbox20  ="      tbox20  ;
+1019  put "   tatm0   ="      tatm0   ;
+1020   
+1021  put /"  a2      ="      a2base      ;
+1022   
+1023  put "   elasmu  ="      elasmu  ;
+1024  put "   prstp   ="      prstp   ;
+1025  put "gsigma1            ="      gsigma1         ;
+1026  put "    e1     ="        e1    ;
+1027  put "expcost2           ="       expcost2       ;
+1028  put "   gback   ="       gback  ;
+1029  put "   limmiu2050      ="       limmiu2070     ;
+1030  put "   limmiu2100      ="      limmiu2120      ;
+1031  put "   cprice1         ="       cprice1        ;
+1032  put "   gcprice         ="   gcprice  ;
+1033  put /;
+1034   
+1035  * Alternative damages
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-altdam-b-4-3-1.gms
+1037  * Solve equations for optimal case
+1038   
+1039  ifopt=1;
+1040  a2base = .01;
+1041   
+1042  * Solve
+1043  solve CO2 maximizing UTILITY using nlp ;
+1044  solve CO2 maximizing UTILITY using nlp ;
+1045  solve CO2 maximizing UTILITY using nlp ;
+1046   
+1047  *Post-Solution Parameter-Assignment
+1048   
+1049  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+1050  ppm(t)    = mat.l(t)/2.13;
+1051  abaterat(t) = abatecost.l(t)/y.l(t);
+1052  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+1053  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+1054  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+1055   
+1056  a2base = 0.003467;
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-altdam-b-4-3-1.gms
+1058  * Produces a file "DICE2023A-altdam-b-4-3-1.csv" in the base directory
+1059   
+1060  put /"SCENARIO: ALTDAM";
+1061  put /"Results of DICE2023-opt-b-4-3-1";
+1062  put /"ALTDAM";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+1064  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+1065   
+1066  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+1067  put /"ifopt =" ifopt;
+1068  put // "Period";
+1069  Loop (T, put T.val);
+1070  put / "Year" ;
+1071   
+1072  Parameters
+1073  gpccons(t)
+1074  growthAL(t)
+1075  drshort(t) ;
+1076  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+1077  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+1078  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+1079   
+1080  Loop (T, put (2015+(TSTEP*T.val) ));
+1081  put / "Objective function (2019$)" ;
+1082  put utility.l;
+1083  put / "Industrial CO2 GtCO2/yr" ;
+1084  Loop (T, put EIND.l(T));
+1085  put / "Atmospheric concentration C (ppm)" ;
+1086  Loop (T, put (MAT.l(T)/2.13));
+1087  put / "Atmospheric concentrations GtC" ;
+1088  Loop (T, put mat.l(t));
+1089  put / "Atmospheric temperaturer (deg c above preind) " ;
+1090  Loop (T, put TATM.l(T));
+1091  put / "Total forcings w/m2" ;
+1092  Loop (T, put forc.l(t));
+1093  put / "Forcings, exogenous w/m2" ;
+1094  Loop (T, put F_Misc(t) );
+1095  put / "CO2 forcings w/m2" ;
+1096  Loop (T, put FORC_CO2(t) );
+1097  put / "Actual other abatable GHG forcings w/m2" ;
+1098  Loop (T, put F_GHGabate.L(t) );
+1099   
+1100  put / "Carbon price (2019 $ per t CO2)" ;
+1101  Loop (T, put cprice.l(T));
+1102  put / "Emissions control rate" ;
+1103  Loop (T, put MIU.l(T));
+1104  put / "Social cost of carbon $/tCO2" ;
+1105  scc('1')=scc('2')*.85;
+1106  Loop (T, put scc(T));
+1107   
+1108  put / "Output, net net trill 2019$" ;
+1109  Loop (T, put Y.l(T));
+1110  put / "Short Interest rate, %/yr" ;
+1111  Loop (T, put Rshort.l(T));
+1112  put / "Population" ;
+1113  Loop (T, put L(T));
+1114  put / "TFP" ;
+1115  Loop (T, put AL(T));
+1116  put / "Output, gross-gross, 2019$" ;
+1117  Loop (T, put YGROSS.L(t));
+1118  put / "Change TFP, %/year" ;
+1119  Loop (T, put ga(t));
+1120  put / "Capital stock, 2019$" ;
+1121  Loop (T, put k.l(t));
+1122   put / "Savings rate, fraction gross output" ;
+1123  Loop (T, put s.l(t));
+1124  put / "Gross investment, 2019$" ;
+1125  Loop (T, put I.l(t));
+1126  put / "Y gross-net, 2019$" ;
+1127  Loop (T, put ynet.l(t));
+1128  put / "Consumption per capita, 2019$ " ;
+1129  Loop (T, put CPC.l(T));
+1130  put / "Consumption" ;
+1131  Loop (T, put C.l(t));
+1132   
+1133  put / "Climate damages, fraction of output" ;
+1134  Loop (T, put DAMFRAC.l(T));
+1135  put / "Damages, 2019$" ;
+1136  Loop (T, put damages.l(t));
+1137  put / "Abatement, 2019$" ;
+1138  Loop (T, put abatecost.l(t));
+1139  put / "Abatement/0utput" ;
+1140  Loop (T, put  abaterat(t) );
+1141  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+1142  Loop (T, put sigma(t));
+1143  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+1144  Loop (T, put sigmaTOT(t));
+1145  put / "Cost, backstop technology ($/tCO2)" ;
+1146  Loop (T, put pbacktime(T));
+1147  put / "Total CO2 Emissions, GTCO2/year" ;
+1148  Loop (T, put Eco2.l(T));
+1149  put / "Total CO2e Emissions, GTCO2-E/year" ;
+1150  Loop (T, put Eco2e.l(T));
+1151  put / "Industrial CO2 Emissions, GTCO2/year" ;
+1152  Loop (T, put EIND.l(T));
+1153  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+1154  Loop (T, put CO2E_GHGabateB(t));
+1155  put / "Land emissions, GtCO2/year" ;
+1156  Loop (T, put eland(t));
+1157  put / "Cumulative CO2 emissions, GtC " ;
+1158  Loop (T, put ccatot.l(t));
+1159  put / "Atmospheric fraction CO2 since 1765 " ;
+1160  Loop (T, put  atfrac1765(t) );
+1161  put / "Atmospheric fraction CO2 since 2020 " ;
+1162  Loop (T, put  atfrac2020(t) );
+1163   
+1164  put / "Permanent C box"
+1165  Loop (T, put res0.L(t) );
+1166  put / "Slow C box"
+1167  Loop (T, put res1.L(t)   );
+1168  put / "Medium C box"
+1169  Loop (T, put res2.L(t)  );
+1170  put / "Fast C box"
+1171  Loop (T, put res3.L(t) );
+1172  put / "Temp Box 1"
+1173  Loop (T, put TBOX1.L(t) );
+1174  put / "Temp Box 2"
+1175  Loop (T, put TBOX2.L(t) );
+1176   
+1177  put / "Alpha"
+1178  Loop (T, put alpha.L(t)  );
+1179  put / "IFR"
+1180  Loop (T, put irft.L(t) );
+1181  put / "cacc"
+1182  Loop (T, put cacc.L(t) );
+1183  put / "ccatot"
+1184  Loop (T, put ccatot.L(t) );
+1185  put / "Share of output net zero emissions"
+1186  Loop (T, put cost1tot(t) );
+1187  put / "Growth p.c. cons (log)"
+1188  Loop (T, put gpccons(t) );
+1189  put / "Change interest rate"
+1190  Loop (T, put drshort(t) );
+1191  put / "Precautionary effect"
+1192  Loop (T, put (rprecaut(t)) );
+1193  put / "Long interest rate(%)"
+1194  Loop (T, put (rlong.l(t)) );
+1195  put / "RR1"
+1196  Loop (T, put (rr1(t)) );
+1197  put / "RR"
+1198  Loop (T, put (rr(t)) );
+1199   
+1200   
+1201  put / "Variance pc cons"
+1202  Loop (T, put (varpcc(t))) ;
+1203  put / "Growth TFP"
+1204  Loop (T, put (growthAL(t+1))) ;
+1205   
+1206   
+1207   
+1208   
+1209   
+1210   
+1211   
+1212   
+1213  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+1214   
+1215  put "   emshare3        ="      emshare3        ;
+1216  put "   tau0    ="      tau0    ;
+1217  put "   tau1    ="      tau1    ;
+1218  put "   tau2    ="      tau2    ;
+1219  put "   tau3    ="      tau3    ;
+1220  put "   teq1    ="      teq1    ;
+1221  put "   teq2    ="      teq2    ;
+1222  put "   d1      ="      d1      ;
+1223  put "   d2      ="      d2      ;
+1224  put "IRF0       ="      irf0;
+1225  put "   irC     ="      irC     ;
+1226  put "   irT     ="      irT     ;
+1227  put /"  fco22x  ="      fco22x  ;
+1228  put "   mat0    ="      mat0    ;
+1229  put "   res00   ="      res00   ;
+1230  put "   res10   ="      res10   ;
+1231  put "   res20   ="      res20   ;
+1232  put "   res30   ="      res30   ;
+1233  put "   mateq   ="      mateq   ;
+1234  put "   tbox10  ="      tbox10  ;
+1235  put "   tbox20  ="      tbox20  ;
+1236  put "   tatm0   ="      tatm0   ;
+1237   
+1238  put /"  a2      ="      a2base      ;
+1239   
+1240  put "   elasmu  ="      elasmu  ;
+1241  put "   prstp   ="      prstp   ;
+1242  put "gsigma1            ="      gsigma1         ;
+1243  put "    e1     ="        e1    ;
+1244  put "expcost2           ="       expcost2       ;
+1245  put "   gback   ="       gback  ;
+1246  put "   limmiu2050      ="       limmiu2070     ;
+1247  put "   limmiu2100      ="      limmiu2120      ;
+1248  put "   cprice1         ="       cprice1        ;
+1249  put "   gcprice         ="   gcprice  ;
+1250  put /;
+1251   
+1252  * PARIS ACCORD AS OF 2022
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-paris-b-4-3-1.gms
+1254  *Revised in light of MIT and lower trajectory of emissions reductions
+1255   
+1256  ifopt=1  ;
+1257   
+1258   
+1259          miuup(t)=MIN(.05+.04*(t.val-1)-(.01*(t.val-5))$(t.val>5),1.00);
+1260          miu.up(t) = miuup(t);
+1261  * Solve
+1262  solve CO2 maximizing UTILITY using nlp ;
+1263  solve CO2 maximizing UTILITY using nlp ;
+1264  solve CO2 maximizing UTILITY using nlp ;
+1265   
+1266   
+1267  *Post-Solution Parameter-Assignment
+1268   
+1269  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+1270  ppm(t)    = mat.l(t)/2.13;
+1271  abaterat(t) = abatecost.l(t)/y.l(t);
+1272  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+1273  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+1274  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+1275   
+1276  miu.up(t) = miuup(t);
+1277  miu.lo(t)=.01;
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-PARIS-b-4-3-1.gms
+1279  put /"SCENARIO: PARIS-UPDATE"
+1280  put /"Results of DICE2023-opt-b-4-3-1";
+1281  put /"PARIS ACCORD LIMITS";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+1283  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+1284   
+1285  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+1286  put /"ifopt =" ifopt;
+1287  put // "Period";
+1288  Loop (T, put T.val);
+1289  put / "Year" ;
+1290   
+1291  Parameters
+1292  gpccons(t)
+1293  growthAL(t)
+1294  drshort(t) ;
+1295  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+1296  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+1297  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+1298   
+1299  Loop (T, put (2015+(TSTEP*T.val) ));
+1300  put / "Objective function (2019$)" ;
+1301  put utility.l;
+1302  put / "Industrial CO2 GtCO2/yr" ;
+1303  Loop (T, put EIND.l(T));
+1304  put / "Atmospheric concentration C (ppm)" ;
+1305  Loop (T, put (MAT.l(T)/2.13));
+1306  put / "Atmospheric concentrations GtC" ;
+1307  Loop (T, put mat.l(t));
+1308  put / "Atmospheric temperaturer (deg c above preind) " ;
+1309  Loop (T, put TATM.l(T));
+1310  put / "Total forcings w/m2" ;
+1311  Loop (T, put forc.l(t));
+1312  put / "Forcings, exogenous w/m2" ;
+1313  Loop (T, put F_Misc(t) );
+1314  put / "CO2 forcings w/m2" ;
+1315  Loop (T, put FORC_CO2(t) );
+1316  put / "Actual other abatable GHG forcings w/m2" ;
+1317  Loop (T, put F_GHGabate.L(t) );
+1318   
+1319  put / "Carbon price (2019 $ per t CO2)" ;
+1320  Loop (T, put cprice.l(T));
+1321  put / "Emissions control rate" ;
+1322  Loop (T, put MIU.l(T));
+1323  put / "Social cost of carbon $/tCO2" ;
+1324  scc('1')=scc('2')*.85;
+1325  Loop (T, put scc(T));
+1326   
+1327  put / "Output, net net trill 2019$" ;
+1328  Loop (T, put Y.l(T));
+1329  put / "Short Interest rate, %/yr" ;
+1330  Loop (T, put Rshort.l(T));
+1331  put / "Population" ;
+1332  Loop (T, put L(T));
+1333  put / "TFP" ;
+1334  Loop (T, put AL(T));
+1335  put / "Output, gross-gross, 2019$" ;
+1336  Loop (T, put YGROSS.L(t));
+1337  put / "Change TFP, %/year" ;
+1338  Loop (T, put ga(t));
+1339  put / "Capital stock, 2019$" ;
+1340  Loop (T, put k.l(t));
+1341   put / "Savings rate, fraction gross output" ;
+1342  Loop (T, put s.l(t));
+1343  put / "Gross investment, 2019$" ;
+1344  Loop (T, put I.l(t));
+1345  put / "Y gross-net, 2019$" ;
+1346  Loop (T, put ynet.l(t));
+1347  put / "Consumption per capita, 2019$ " ;
+1348  Loop (T, put CPC.l(T));
+1349  put / "Consumption" ;
+1350  Loop (T, put C.l(t));
+1351   
+1352  put / "Climate damages, fraction of output" ;
+1353  Loop (T, put DAMFRAC.l(T));
+1354  put / "Damages, 2019$" ;
+1355  Loop (T, put damages.l(t));
+1356  put / "Abatement, 2019$" ;
+1357  Loop (T, put abatecost.l(t));
+1358  put / "Abatement/0utput" ;
+1359  Loop (T, put  abaterat(t) );
+1360  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+1361  Loop (T, put sigma(t));
+1362  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+1363  Loop (T, put sigmaTOT(t));
+1364  put / "Cost, backstop technology ($/tCO2)" ;
+1365  Loop (T, put pbacktime(T));
+1366  put / "Total CO2 Emissions, GTCO2/year" ;
+1367  Loop (T, put Eco2.l(T));
+1368  put / "Total CO2e Emissions, GTCO2-E/year" ;
+1369  Loop (T, put Eco2e.l(T));
+1370  put / "Industrial CO2 Emissions, GTCO2/year" ;
+1371  Loop (T, put EIND.l(T));
+1372  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+1373  Loop (T, put CO2E_GHGabateB(t));
+1374  put / "Land emissions, GtCO2/year" ;
+1375  Loop (T, put eland(t));
+1376  put / "Cumulative CO2 emissions, GtC " ;
+1377  Loop (T, put ccatot.l(t));
+1378  put / "Atmospheric fraction CO2 since 1765 " ;
+1379  Loop (T, put  atfrac1765(t) );
+1380  put / "Atmospheric fraction CO2 since 2020 " ;
+1381  Loop (T, put  atfrac2020(t) );
+1382   
+1383  put / "Permanent C box"
+1384  Loop (T, put res0.L(t) );
+1385  put / "Slow C box"
+1386  Loop (T, put res1.L(t)   );
+1387  put / "Medium C box"
+1388  Loop (T, put res2.L(t)  );
+1389  put / "Fast C box"
+1390  Loop (T, put res3.L(t) );
+1391  put / "Temp Box 1"
+1392  Loop (T, put TBOX1.L(t) );
+1393  put / "Temp Box 2"
+1394  Loop (T, put TBOX2.L(t) );
+1395   
+1396  put / "Alpha"
+1397  Loop (T, put alpha.L(t)  );
+1398  put / "IFR"
+1399  Loop (T, put irft.L(t) );
+1400  put / "cacc"
+1401  Loop (T, put cacc.L(t) );
+1402  put / "ccatot"
+1403  Loop (T, put ccatot.L(t) );
+1404  put / "Share of output net zero emissions"
+1405  Loop (T, put cost1tot(t) );
+1406  put / "Growth p.c. cons (log)"
+1407  Loop (T, put gpccons(t) );
+1408  put / "Change interest rate"
+1409  Loop (T, put drshort(t) );
+1410  put / "Precautionary effect"
+1411  Loop (T, put (rprecaut(t)) );
+1412  put / "Long interest rate(%)"
+1413  Loop (T, put (rlong.l(t)) );
+1414  put / "RR1"
+1415  Loop (T, put (rr1(t)) );
+1416  put / "RR"
+1417  Loop (T, put (rr(t)) );
+1418   
+1419   
+1420  put / "Variance pc cons"
+1421  Loop (T, put (varpcc(t))) ;
+1422  put / "Growth TFP"
+1423  Loop (T, put (growthAL(t+1))) ;
+1424   
+1425   
+1426   
+1427   
+1428   
+1429   
+1430   
+1431   
+1432  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+1433   
+1434  put "   emshare3        ="      emshare3        ;
+1435  put "   tau0    ="      tau0    ;
+1436  put "   tau1    ="      tau1    ;
+1437  put "   tau2    ="      tau2    ;
+1438  put "   tau3    ="      tau3    ;
+1439  put "   teq1    ="      teq1    ;
+1440  put "   teq2    ="      teq2    ;
+1441  put "   d1      ="      d1      ;
+1442  put "   d2      ="      d2      ;
+1443  put "IRF0       ="      irf0;
+1444  put "   irC     ="      irC     ;
+1445  put "   irT     ="      irT     ;
+1446  put /"  fco22x  ="      fco22x  ;
+1447  put "   mat0    ="      mat0    ;
+1448  put "   res00   ="      res00   ;
+1449  put "   res10   ="      res10   ;
+1450  put "   res20   ="      res20   ;
+1451  put "   res30   ="      res30   ;
+1452  put "   mateq   ="      mateq   ;
+1453  put "   tbox10  ="      tbox10  ;
+1454  put "   tbox20  ="      tbox20  ;
+1455  put "   tatm0   ="      tatm0   ;
+1456   
+1457  put /"  a2      ="      a2base      ;
+1458   
+1459  put "   elasmu  ="      elasmu  ;
+1460  put "   prstp   ="      prstp   ;
+1461  put "gsigma1            ="      gsigma1         ;
+1462  put "    e1     ="        e1    ;
+1463  put "expcost2           ="       expcost2       ;
+1464  put "   gback   ="       gback  ;
+1465  put "   limmiu2050      ="       limmiu2070     ;
+1466  put "   limmiu2100      ="      limmiu2120      ;
+1467  put "   cprice1         ="       cprice1        ;
+1468  put "   gcprice         ="   gcprice  ;
+1469  put /;
+1470   
+1471  * BASELINE WITH CURRENT LEVEL OF POLICY
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-base-b-4-3-1.gms
+1473  * Solve equations for base (low policy) case
+1474   
+1475  ifopt=0;
+1476  tatm.up(t)=15;
+1477   
+1478  *miu.fx(t)$(t.val > 37) = 1;
+1479   
+1480  cprice.up(t)$(t.val < 47)=cpricebase(t);
+1481  miuup(t) = 1.0;
+1482  miu.up(t) = miuup(t);
+1483  miu.fx(t)$(t.val > 57)=1;
+1484   
+1485  solve CO2 maximizing UTILITY using nlp ;
+1486  solve CO2 maximizing UTILITY using nlp ;
+1487  solve CO2 maximizing UTILITY using nlp ;
+1488   
+1489  *Post-Solution Parameter-Assignment
+1490  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+1491  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+1492  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+1493  ppm(t)    = mat.l(t)/2.13;
+1494  abaterat(t)=abatecost.l(t)/y.l(t);
+1495  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+1496   
+1497  cprice.up(t)=500;
+1498  ifopt=1;
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-base-b-4-3-1.gms
+1500  * Produces a file "DICE2023A-base-4-3-1.csv" in the base directory
+1501   
+1502  put /"SCENARIO: BASE";
+1503  put /"Results of DICE2023-opt-b-4-3-11";
+1504  put /"BASE";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+1506  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+1507   
+1508  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+1509  put /"ifopt =" ifopt;
+1510  put // "Period";
+1511  Loop (T, put T.val);
+1512  put / "Year" ;
+1513   
+1514  Parameters
+1515  gpccons(t)
+1516  growthAL(t)
+1517  drshort(t) ;
+1518  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+1519  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+1520  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+1521   
+1522  Loop (T, put (2015+(TSTEP*T.val) ));
+1523  put / "Objective function (2019$)" ;
+1524  put utility.l;
+1525  put / "Industrial CO2 GtCO2/yr" ;
+1526  Loop (T, put EIND.l(T));
+1527  put / "Atmospheric concentration C (ppm)" ;
+1528  Loop (T, put (MAT.l(T)/2.13));
+1529  put / "Atmospheric concentrations GtC" ;
+1530  Loop (T, put mat.l(t));
+1531  put / "Atmospheric temperaturer (deg c above preind) " ;
+1532  Loop (T, put TATM.l(T));
+1533  put / "Total forcings w/m2" ;
+1534  Loop (T, put forc.l(t));
+1535  put / "Forcings, exogenous w/m2" ;
+1536  Loop (T, put F_Misc(t) );
+1537  put / "CO2 forcings w/m2" ;
+1538  Loop (T, put FORC_CO2(t) );
+1539  put / "Actual other abatable GHG forcings w/m2" ;
+1540  Loop (T, put F_GHGabate.L(t) );
+1541   
+1542  put / "Carbon price (2019 $ per t CO2)" ;
+1543  Loop (T, put cprice.l(T));
+1544  put / "Emissions control rate" ;
+1545  Loop (T, put MIU.l(T));
+1546  put / "Social cost of carbon $/tCO2" ;
+1547  scc('1')=scc('2')*.85;
+1548  Loop (T, put scc(T));
+1549   
+1550  put / "Output, net net trill 2019$" ;
+1551  Loop (T, put Y.l(T));
+1552  put / "Short Interest rate, %/yr" ;
+1553  Loop (T, put Rshort.l(T));
+1554  put / "Population" ;
+1555  Loop (T, put L(T));
+1556  put / "TFP" ;
+1557  Loop (T, put AL(T));
+1558  put / "Output, gross-gross, 2019$" ;
+1559  Loop (T, put YGROSS.L(t));
+1560  put / "Change TFP, %/year" ;
+1561  Loop (T, put ga(t));
+1562  put / "Capital stock, 2019$" ;
+1563  Loop (T, put k.l(t));
+1564   put / "Savings rate, fraction gross output" ;
+1565  Loop (T, put s.l(t));
+1566  put / "Gross investment, 2019$" ;
+1567  Loop (T, put I.l(t));
+1568  put / "Y gross-net, 2019$" ;
+1569  Loop (T, put ynet.l(t));
+1570  put / "Consumption per capita, 2019$ " ;
+1571  Loop (T, put CPC.l(T));
+1572  put / "Consumption" ;
+1573  Loop (T, put C.l(t));
+1574   
+1575  put / "Climate damages, fraction of output" ;
+1576  Loop (T, put DAMFRAC.l(T));
+1577  put / "Damages, 2019$" ;
+1578  Loop (T, put damages.l(t));
+1579  put / "Abatement, 2019$" ;
+1580  Loop (T, put abatecost.l(t));
+1581  put / "Abatement/0utput" ;
+1582  Loop (T, put  abaterat(t) );
+1583  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+1584  Loop (T, put sigma(t));
+1585  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+1586  Loop (T, put sigmaTOT(t));
+1587  put / "Cost, backstop technology ($/tCO2)" ;
+1588  Loop (T, put pbacktime(T));
+1589  put / "Total CO2 Emissions, GTCO2/year" ;
+1590  Loop (T, put Eco2.l(T));
+1591  put / "Total CO2e Emissions, GTCO2-E/year" ;
+1592  Loop (T, put Eco2e.l(T));
+1593  put / "Industrial CO2 Emissions, GTCO2/year" ;
+1594  Loop (T, put EIND.l(T));
+1595  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+1596  Loop (T, put CO2E_GHGabateB(t));
+1597  put / "Land emissions, GtCO2/year" ;
+1598  Loop (T, put eland(t));
+1599  put / "Cumulative CO2 emissions, GtC " ;
+1600  Loop (T, put ccatot.l(t));
+1601  put / "Atmospheric fraction CO2 since 1765 " ;
+1602  Loop (T, put  atfrac1765(t) );
+1603  put / "Atmospheric fraction CO2 since 2020 " ;
+1604  Loop (T, put  atfrac2020(t) );
+1605   
+1606  put / "Permanent C box"
+1607  Loop (T, put res0.L(t) );
+1608  put / "Slow C box"
+1609  Loop (T, put res1.L(t)   );
+1610  put / "Medium C box"
+1611  Loop (T, put res2.L(t)  );
+1612  put / "Fast C box"
+1613  Loop (T, put res3.L(t) );
+1614  put / "Temp Box 1"
+1615  Loop (T, put TBOX1.L(t) );
+1616  put / "Temp Box 2"
+1617  Loop (T, put TBOX2.L(t) );
+1618   
+1619  put / "Alpha"
+1620  Loop (T, put alpha.L(t)  );
+1621  put / "IFR"
+1622  Loop (T, put irft.L(t) );
+1623  put / "cacc"
+1624  Loop (T, put cacc.L(t) );
+1625  put / "ccatot"
+1626  Loop (T, put ccatot.L(t) );
+1627  put / "Share of output net zero emissions"
+1628  Loop (T, put cost1tot(t) );
+1629  put / "Growth p.c. cons (log)"
+1630  Loop (T, put gpccons(t) );
+1631  put / "Change interest rate"
+1632  Loop (T, put drshort(t) );
+1633  put / "Precautionary effect"
+1634  Loop (T, put (rprecaut(t)) );
+1635  put / "Long interest rate(%)"
+1636  Loop (T, put (rlong.l(t)) );
+1637  put / "RR1"
+1638  Loop (T, put (rr1(t)) );
+1639  put / "RR"
+1640  Loop (T, put (rr(t)) );
+1641   
+1642   
+1643  put / "Variance pc cons"
+1644  Loop (T, put (varpcc(t))) ;
+1645  put / "Growth TFP"
+1646  Loop (T, put (growthAL(t+1))) ;
+1647   
+1648   
+1649   
+1650   
+1651   
+1652   
+1653   
+1654   
+1655  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+1656   
+1657  put "   emshare3        ="      emshare3        ;
+1658  put "   tau0    ="      tau0    ;
+1659  put "   tau1    ="      tau1    ;
+1660  put "   tau2    ="      tau2    ;
+1661  put "   tau3    ="      tau3    ;
+1662  put "   teq1    ="      teq1    ;
+1663  put "   teq2    ="      teq2    ;
+1664  put "   d1      ="      d1      ;
+1665  put "   d2      ="      d2      ;
+1666  put "IRF0       ="      irf0;
+1667  put "   irC     ="      irC     ;
+1668  put "   irT     ="      irT     ;
+1669  put /"  fco22x  ="      fco22x  ;
+1670  put "   mat0    ="      mat0    ;
+1671  put "   res00   ="      res00   ;
+1672  put "   res10   ="      res10   ;
+1673  put "   res20   ="      res20   ;
+1674  put "   res30   ="      res30   ;
+1675  put "   mateq   ="      mateq   ;
+1676  put "   tbox10  ="      tbox10  ;
+1677  put "   tbox20  ="      tbox20  ;
+1678  put "   tatm0   ="      tatm0   ;
+1679   
+1680  put /"  a2      ="      a2base      ;
+1681   
+1682  put "   elasmu  ="      elasmu  ;
+1683  put "   prstp   ="      prstp   ;
+1684  put "gsigma1            ="      gsigma1         ;
+1685  put "    e1     ="        e1    ;
+1686  put "expcost2           ="       expcost2       ;
+1687  put "   gback   ="       gback  ;
+1688  put "   limmiu2050      ="       limmiu2070     ;
+1689  put "   limmiu2100      ="      limmiu2120      ;
+1690  put "   cprice1         ="       cprice1        ;
+1691  put "   gcprice         ="   gcprice  ;
+1692  put /;
+1693   
+1694  * 5% DISCOUNT RATE
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC5%-b-4-3-1.gms
+1696  * Discount program
+1697   
+1698  ifopt=1;
+1699  elasmu   = .001;
+1700  prstp    = .05;
+1701     RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+1702          RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+1703          RR1(t)$(t.val > 51) = 1/((1+prstp)**(5*51));
+1704          RR(t)= RR1(t);
+1705   
+1706  optlrsav = (dk + .004)/(dk + .004*elasmu + prstp)*gama;
+1707          miuup('1')= .05;
+1708          miuup('2')= .10;
+1709          miuup(t)$(t.val > 2) = ( delmiumax*(t.val-1));
+1710          miuup(t)$(t.val > 8) = 0.85+.05*(t.val-8);
+1711          miuup(t)$(t.val > 11) = limmiu2070;
+1712          miuup(t)$(t.val > 20) = limmiu2120;
+1713          miuup(t)$(t.val > 37) = 1.05;
+1714          miuup(t)$(t.val > 57) = 1.0;
+1715  miu.up(t) = miuup(t);
+1716  k0 = 290;
+1717  k.FX(tfirst)      = k0;
+1718  solve CO2 maximizing UTILITY using nlp ;
+1719  solve CO2 maximizing UTILITY using nlp ;
+1720  solve CO2 maximizing UTILITY using nlp ;
+1721   
+1722  *Post-Solution Parameter-Assignment
+1723   
+1724  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+1725  ppm(t)    = mat.l(t)/2.13;
+1726  abaterat(t) = abatecost.l(t)/y.l(t);
+1727  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+1728  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+1729  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+1730   
+1731   
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC5%-b-4-3-1.gms
+1733  put /"SCENARIO: R = 5%"
+1734  put /"Results of DICE2023-DISC-5%-b-4-3-1";
+1735  put /"5% DISCOUNT OPTIMAL";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+1737  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+1738   
+1739  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+1740  put /"ifopt =" ifopt;
+1741  put // "Period";
+1742  Loop (T, put T.val);
+1743  put / "Year" ;
+1744   
+1745  Parameters
+1746  gpccons(t)
+1747  growthAL(t)
+1748  drshort(t) ;
+1749  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+1750  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+1751  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+1752   
+1753  Loop (T, put (2015+(TSTEP*T.val) ));
+1754  put / "Objective function (2019$)" ;
+1755  put utility.l;
+1756  put / "Industrial CO2 GtCO2/yr" ;
+1757  Loop (T, put EIND.l(T));
+1758  put / "Atmospheric concentration C (ppm)" ;
+1759  Loop (T, put (MAT.l(T)/2.13));
+1760  put / "Atmospheric concentrations GtC" ;
+1761  Loop (T, put mat.l(t));
+1762  put / "Atmospheric temperaturer (deg c above preind) " ;
+1763  Loop (T, put TATM.l(T));
+1764  put / "Total forcings w/m2" ;
+1765  Loop (T, put forc.l(t));
+1766  put / "Forcings, exogenous w/m2" ;
+1767  Loop (T, put F_Misc(t) );
+1768  put / "CO2 forcings w/m2" ;
+1769  Loop (T, put FORC_CO2(t) );
+1770  put / "Actual other abatable GHG forcings w/m2" ;
+1771  Loop (T, put F_GHGabate.L(t) );
+1772   
+1773  put / "Carbon price (2019 $ per t CO2)" ;
+1774  Loop (T, put cprice.l(T));
+1775  put / "Emissions control rate" ;
+1776  Loop (T, put MIU.l(T));
+1777  put / "Social cost of carbon $/tCO2" ;
+1778  scc('1')=scc('2')*.85;
+1779  Loop (T, put scc(T));
+1780   
+1781  put / "Output, net net trill 2019$" ;
+1782  Loop (T, put Y.l(T));
+1783  put / "Short Interest rate, %/yr" ;
+1784  Loop (T, put Rshort.l(T));
+1785  put / "Population" ;
+1786  Loop (T, put L(T));
+1787  put / "TFP" ;
+1788  Loop (T, put AL(T));
+1789  put / "Output, gross-gross, 2019$" ;
+1790  Loop (T, put YGROSS.L(t));
+1791  put / "Change TFP, %/year" ;
+1792  Loop (T, put ga(t));
+1793  put / "Capital stock, 2019$" ;
+1794  Loop (T, put k.l(t));
+1795   put / "Savings rate, fraction gross output" ;
+1796  Loop (T, put s.l(t));
+1797  put / "Gross investment, 2019$" ;
+1798  Loop (T, put I.l(t));
+1799  put / "Y gross-net, 2019$" ;
+1800  Loop (T, put ynet.l(t));
+1801  put / "Consumption per capita, 2019$ " ;
+1802  Loop (T, put CPC.l(T));
+1803  put / "Consumption" ;
+1804  Loop (T, put C.l(t));
+1805   
+1806  put / "Climate damages, fraction of output" ;
+1807  Loop (T, put DAMFRAC.l(T));
+1808  put / "Damages, 2019$" ;
+1809  Loop (T, put damages.l(t));
+1810  put / "Abatement, 2019$" ;
+1811  Loop (T, put abatecost.l(t));
+1812  put / "Abatement/0utput" ;
+1813  Loop (T, put  abaterat(t) );
+1814  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+1815  Loop (T, put sigma(t));
+1816  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+1817  Loop (T, put sigmaTOT(t));
+1818  put / "Cost, backstop technology ($/tCO2)" ;
+1819  Loop (T, put pbacktime(T));
+1820  put / "Total CO2 Emissions, GTCO2/year" ;
+1821  Loop (T, put Eco2.l(T));
+1822  put / "Total CO2e Emissions, GTCO2-E/year" ;
+1823  Loop (T, put Eco2e.l(T));
+1824  put / "Industrial CO2 Emissions, GTCO2/year" ;
+1825  Loop (T, put EIND.l(T));
+1826  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+1827  Loop (T, put CO2E_GHGabateB(t));
+1828  put / "Land emissions, GtCO2/year" ;
+1829  Loop (T, put eland(t));
+1830  put / "Cumulative CO2 emissions, GtC " ;
+1831  Loop (T, put ccatot.l(t));
+1832  put / "Atmospheric fraction CO2 since 1765 " ;
+1833  Loop (T, put  atfrac1765(t) );
+1834  put / "Atmospheric fraction CO2 since 2020 " ;
+1835  Loop (T, put  atfrac2020(t) );
+1836   
+1837  put / "Permanent C box"
+1838  Loop (T, put res0.L(t) );
+1839  put / "Slow C box"
+1840  Loop (T, put res1.L(t)   );
+1841  put / "Medium C box"
+1842  Loop (T, put res2.L(t)  );
+1843  put / "Fast C box"
+1844  Loop (T, put res3.L(t) );
+1845  put / "Temp Box 1"
+1846  Loop (T, put TBOX1.L(t) );
+1847  put / "Temp Box 2"
+1848  Loop (T, put TBOX2.L(t) );
+1849   
+1850  put / "Alpha"
+1851  Loop (T, put alpha.L(t)  );
+1852  put / "IFR"
+1853  Loop (T, put irft.L(t) );
+1854  put / "cacc"
+1855  Loop (T, put cacc.L(t) );
+1856  put / "ccatot"
+1857  Loop (T, put ccatot.L(t) );
+1858  put / "Share of output net zero emissions"
+1859  Loop (T, put cost1tot(t) );
+1860  put / "Growth p.c. cons (log)"
+1861  Loop (T, put gpccons(t) );
+1862  put / "Change interest rate"
+1863  Loop (T, put drshort(t) );
+1864  put / "Precautionary effect"
+1865  Loop (T, put (rprecaut(t)) );
+1866  put / "Long interest rate(%)"
+1867  Loop (T, put (rlong.l(t)) );
+1868  put / "RR1"
+1869  Loop (T, put (rr1(t)) );
+1870  put / "RR"
+1871  Loop (T, put (rr(t)) );
+1872   
+1873   
+1874  put / "Variance pc cons"
+1875  Loop (T, put (varpcc(t))) ;
+1876  put / "Growth TFP"
+1877  Loop (T, put (growthAL(t+1))) ;
+1878   
+1879   
+1880   
+1881   
+1882   
+1883   
+1884   
+1885   
+1886  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+1887   
+1888  put "   emshare3        ="      emshare3        ;
+1889  put "   tau0    ="      tau0    ;
+1890  put "   tau1    ="      tau1    ;
+1891  put "   tau2    ="      tau2    ;
+1892  put "   tau3    ="      tau3    ;
+1893  put "   teq1    ="      teq1    ;
+1894  put "   teq2    ="      teq2    ;
+1895  put "   d1      ="      d1      ;
+1896  put "   d2      ="      d2      ;
+1897  put "IRF0       ="      irf0;
+1898  put "   irC     ="      irC     ;
+1899  put "   irT     ="      irT     ;
+1900  put /"  fco22x  ="      fco22x  ;
+1901  put "   mat0    ="      mat0    ;
+1902  put "   res00   ="      res00   ;
+1903  put "   res10   ="      res10   ;
+1904  put "   res20   ="      res20   ;
+1905  put "   res30   ="      res30   ;
+1906  put "   mateq   ="      mateq   ;
+1907  put "   tbox10  ="      tbox10  ;
+1908  put "   tbox20  ="      tbox20  ;
+1909  put "   tatm0   ="      tatm0   ;
+1910   
+1911  put /"  a2      ="      a2base      ;
+1912   
+1913  put "   elasmu  ="      elasmu  ;
+1914  put "   prstp   ="      prstp   ;
+1915  put "gsigma1            ="      gsigma1         ;
+1916  put "    e1     ="        e1    ;
+1917  put "expcost2           ="       expcost2       ;
+1918  put "   gback   ="       gback  ;
+1919  put "   limmiu2050      ="       limmiu2070     ;
+1920  put "   limmiu2100      ="      limmiu2120      ;
+1921  put "   cprice1         ="       cprice1        ;
+1922  put "   gcprice         ="   gcprice  ;
+1923  put /;
+1924   
+1925  * 4% DISCOUNT RATE
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC4%-b-4-3-1.gms
+1927  * Discount program
+1928   
+1929  ifopt=1;
+1930  elasmu   = .001;
+1931  prstp    = .04;
+1932     RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+1933          RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+1934          RR1(t)$(t.val > 81) =  1/((1+prstp)**(5*80));
+1935          RR(t)= RR1(t);
+1936   
+1937  optlrsav = (dk + .004)/(dk + .004*elasmu + prstp)*gama;
+1938  cprice.up(t) = 1000;
+1939  k0 = 326;
+1940  k.FX(tfirst)      = k0;
+1941   
+1942  solve CO2 maximizing UTILITY using nlp ;
+1943  solve CO2 maximizing UTILITY using nlp ;
+1944  solve CO2 maximizing UTILITY using nlp ;
+1945   
+1946  *Post-Solution Parameter-Assignment
+1947   
+1948  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+1949  ppm(t)    = mat.l(t)/2.13;
+1950  abaterat(t) = abatecost.l(t)/y.l(t);
+1951  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+1952  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+1953  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+1954   
+1955   
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC4%-b-4-3-1.gms
+1957  put /"SCENARIO: R = 4%"
+1958  put /"Results of DICE2023-DISC-4%-b-4-3-1";
+1959  put /"4% DISCOUNT OPTIMAL";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+1961  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+1962   
+1963  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+1964  put /"ifopt =" ifopt;
+1965  put // "Period";
+1966  Loop (T, put T.val);
+1967  put / "Year" ;
+1968   
+1969  Parameters
+1970  gpccons(t)
+1971  growthAL(t)
+1972  drshort(t) ;
+1973  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+1974  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+1975  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+1976   
+1977  Loop (T, put (2015+(TSTEP*T.val) ));
+1978  put / "Objective function (2019$)" ;
+1979  put utility.l;
+1980  put / "Industrial CO2 GtCO2/yr" ;
+1981  Loop (T, put EIND.l(T));
+1982  put / "Atmospheric concentration C (ppm)" ;
+1983  Loop (T, put (MAT.l(T)/2.13));
+1984  put / "Atmospheric concentrations GtC" ;
+1985  Loop (T, put mat.l(t));
+1986  put / "Atmospheric temperaturer (deg c above preind) " ;
+1987  Loop (T, put TATM.l(T));
+1988  put / "Total forcings w/m2" ;
+1989  Loop (T, put forc.l(t));
+1990  put / "Forcings, exogenous w/m2" ;
+1991  Loop (T, put F_Misc(t) );
+1992  put / "CO2 forcings w/m2" ;
+1993  Loop (T, put FORC_CO2(t) );
+1994  put / "Actual other abatable GHG forcings w/m2" ;
+1995  Loop (T, put F_GHGabate.L(t) );
+1996   
+1997  put / "Carbon price (2019 $ per t CO2)" ;
+1998  Loop (T, put cprice.l(T));
+1999  put / "Emissions control rate" ;
+2000  Loop (T, put MIU.l(T));
+2001  put / "Social cost of carbon $/tCO2" ;
+2002  scc('1')=scc('2')*.85;
+2003  Loop (T, put scc(T));
+2004   
+2005  put / "Output, net net trill 2019$" ;
+2006  Loop (T, put Y.l(T));
+2007  put / "Short Interest rate, %/yr" ;
+2008  Loop (T, put Rshort.l(T));
+2009  put / "Population" ;
+2010  Loop (T, put L(T));
+2011  put / "TFP" ;
+2012  Loop (T, put AL(T));
+2013  put / "Output, gross-gross, 2019$" ;
+2014  Loop (T, put YGROSS.L(t));
+2015  put / "Change TFP, %/year" ;
+2016  Loop (T, put ga(t));
+2017  put / "Capital stock, 2019$" ;
+2018  Loop (T, put k.l(t));
+2019   put / "Savings rate, fraction gross output" ;
+2020  Loop (T, put s.l(t));
+2021  put / "Gross investment, 2019$" ;
+2022  Loop (T, put I.l(t));
+2023  put / "Y gross-net, 2019$" ;
+2024  Loop (T, put ynet.l(t));
+2025  put / "Consumption per capita, 2019$ " ;
+2026  Loop (T, put CPC.l(T));
+2027  put / "Consumption" ;
+2028  Loop (T, put C.l(t));
+2029   
+2030  put / "Climate damages, fraction of output" ;
+2031  Loop (T, put DAMFRAC.l(T));
+2032  put / "Damages, 2019$" ;
+2033  Loop (T, put damages.l(t));
+2034  put / "Abatement, 2019$" ;
+2035  Loop (T, put abatecost.l(t));
+2036  put / "Abatement/0utput" ;
+2037  Loop (T, put  abaterat(t) );
+2038  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+2039  Loop (T, put sigma(t));
+2040  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+2041  Loop (T, put sigmaTOT(t));
+2042  put / "Cost, backstop technology ($/tCO2)" ;
+2043  Loop (T, put pbacktime(T));
+2044  put / "Total CO2 Emissions, GTCO2/year" ;
+2045  Loop (T, put Eco2.l(T));
+2046  put / "Total CO2e Emissions, GTCO2-E/year" ;
+2047  Loop (T, put Eco2e.l(T));
+2048  put / "Industrial CO2 Emissions, GTCO2/year" ;
+2049  Loop (T, put EIND.l(T));
+2050  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+2051  Loop (T, put CO2E_GHGabateB(t));
+2052  put / "Land emissions, GtCO2/year" ;
+2053  Loop (T, put eland(t));
+2054  put / "Cumulative CO2 emissions, GtC " ;
+2055  Loop (T, put ccatot.l(t));
+2056  put / "Atmospheric fraction CO2 since 1765 " ;
+2057  Loop (T, put  atfrac1765(t) );
+2058  put / "Atmospheric fraction CO2 since 2020 " ;
+2059  Loop (T, put  atfrac2020(t) );
+2060   
+2061  put / "Permanent C box"
+2062  Loop (T, put res0.L(t) );
+2063  put / "Slow C box"
+2064  Loop (T, put res1.L(t)   );
+2065  put / "Medium C box"
+2066  Loop (T, put res2.L(t)  );
+2067  put / "Fast C box"
+2068  Loop (T, put res3.L(t) );
+2069  put / "Temp Box 1"
+2070  Loop (T, put TBOX1.L(t) );
+2071  put / "Temp Box 2"
+2072  Loop (T, put TBOX2.L(t) );
+2073   
+2074  put / "Alpha"
+2075  Loop (T, put alpha.L(t)  );
+2076  put / "IFR"
+2077  Loop (T, put irft.L(t) );
+2078  put / "cacc"
+2079  Loop (T, put cacc.L(t) );
+2080  put / "ccatot"
+2081  Loop (T, put ccatot.L(t) );
+2082  put / "Share of output net zero emissions"
+2083  Loop (T, put cost1tot(t) );
+2084  put / "Growth p.c. cons (log)"
+2085  Loop (T, put gpccons(t) );
+2086  put / "Change interest rate"
+2087  Loop (T, put drshort(t) );
+2088  put / "Precautionary effect"
+2089  Loop (T, put (rprecaut(t)) );
+2090  put / "Long interest rate(%)"
+2091  Loop (T, put (rlong.l(t)) );
+2092  put / "RR1"
+2093  Loop (T, put (rr1(t)) );
+2094  put / "RR"
+2095  Loop (T, put (rr(t)) );
+2096   
+2097   
+2098  put / "Variance pc cons"
+2099  Loop (T, put (varpcc(t))) ;
+2100  put / "Growth TFP"
+2101  Loop (T, put (growthAL(t+1))) ;
+2102   
+2103   
+2104   
+2105   
+2106   
+2107   
+2108   
+2109   
+2110  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+2111   
+2112  put "   emshare3        ="      emshare3        ;
+2113  put "   tau0    ="      tau0    ;
+2114  put "   tau1    ="      tau1    ;
+2115  put "   tau2    ="      tau2    ;
+2116  put "   tau3    ="      tau3    ;
+2117  put "   teq1    ="      teq1    ;
+2118  put "   teq2    ="      teq2    ;
+2119  put "   d1      ="      d1      ;
+2120  put "   d2      ="      d2      ;
+2121  put "IRF0       ="      irf0;
+2122  put "   irC     ="      irC     ;
+2123  put "   irT     ="      irT     ;
+2124  put /"  fco22x  ="      fco22x  ;
+2125  put "   mat0    ="      mat0    ;
+2126  put "   res00   ="      res00   ;
+2127  put "   res10   ="      res10   ;
+2128  put "   res20   ="      res20   ;
+2129  put "   res30   ="      res30   ;
+2130  put "   mateq   ="      mateq   ;
+2131  put "   tbox10  ="      tbox10  ;
+2132  put "   tbox20  ="      tbox20  ;
+2133  put "   tatm0   ="      tatm0   ;
+2134   
+2135  put /"  a2      ="      a2base      ;
+2136   
+2137  put "   elasmu  ="      elasmu  ;
+2138  put "   prstp   ="      prstp   ;
+2139  put "gsigma1            ="      gsigma1         ;
+2140  put "    e1     ="        e1    ;
+2141  put "expcost2           ="       expcost2       ;
+2142  put "   gback   ="       gback  ;
+2143  put "   limmiu2050      ="       limmiu2070     ;
+2144  put "   limmiu2100      ="      limmiu2120      ;
+2145  put "   cprice1         ="       cprice1        ;
+2146  put "   gcprice         ="   gcprice  ;
+2147  put /;
+2148   
+2149  * 3% DISCOUNT RATE
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC3%-b-4-3-1.gms
+2151  * Discount program
+2152   
+2153  ifopt=1;
+2154  elasmu   = .001;
+2155  prstp    = .03;
+2156     RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+2157     RR(t)= RR1(t);
+2158   
+2159  optlrsav = (dk + .004)/(dk + .004*elasmu + prstp)*gama;
+2160  k0 = 370;
+2161  k.FX(tfirst)      = k0;
+2162   
+2163  solve CO2 maximizing UTILITY using nlp ;
+2164  solve CO2 maximizing UTILITY using nlp ;
+2165  solve CO2 maximizing UTILITY using nlp ;
+2166   
+2167  *Post-Solution Parameter-Assignment
+2168   
+2169  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+2170  ppm(t)    = mat.l(t)/2.13;
+2171  abaterat(t) = abatecost.l(t)/y.l(t);
+2172  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+2173  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+2174  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+2175   
+2176   
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC3%-b-4-3-1.gms
+2178  put /"SCENARIO: R = 3%"
+2179  put /"Results of DICE2023-DISC-3%-b-4-3-1";
+2180  put /"3% DISCOUNT OPTIMAL";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+2182  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+2183   
+2184  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+2185  put /"ifopt =" ifopt;
+2186  put // "Period";
+2187  Loop (T, put T.val);
+2188  put / "Year" ;
+2189   
+2190  Parameters
+2191  gpccons(t)
+2192  growthAL(t)
+2193  drshort(t) ;
+2194  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+2195  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+2196  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+2197   
+2198  Loop (T, put (2015+(TSTEP*T.val) ));
+2199  put / "Objective function (2019$)" ;
+2200  put utility.l;
+2201  put / "Industrial CO2 GtCO2/yr" ;
+2202  Loop (T, put EIND.l(T));
+2203  put / "Atmospheric concentration C (ppm)" ;
+2204  Loop (T, put (MAT.l(T)/2.13));
+2205  put / "Atmospheric concentrations GtC" ;
+2206  Loop (T, put mat.l(t));
+2207  put / "Atmospheric temperaturer (deg c above preind) " ;
+2208  Loop (T, put TATM.l(T));
+2209  put / "Total forcings w/m2" ;
+2210  Loop (T, put forc.l(t));
+2211  put / "Forcings, exogenous w/m2" ;
+2212  Loop (T, put F_Misc(t) );
+2213  put / "CO2 forcings w/m2" ;
+2214  Loop (T, put FORC_CO2(t) );
+2215  put / "Actual other abatable GHG forcings w/m2" ;
+2216  Loop (T, put F_GHGabate.L(t) );
+2217   
+2218  put / "Carbon price (2019 $ per t CO2)" ;
+2219  Loop (T, put cprice.l(T));
+2220  put / "Emissions control rate" ;
+2221  Loop (T, put MIU.l(T));
+2222  put / "Social cost of carbon $/tCO2" ;
+2223  scc('1')=scc('2')*.85;
+2224  Loop (T, put scc(T));
+2225   
+2226  put / "Output, net net trill 2019$" ;
+2227  Loop (T, put Y.l(T));
+2228  put / "Short Interest rate, %/yr" ;
+2229  Loop (T, put Rshort.l(T));
+2230  put / "Population" ;
+2231  Loop (T, put L(T));
+2232  put / "TFP" ;
+2233  Loop (T, put AL(T));
+2234  put / "Output, gross-gross, 2019$" ;
+2235  Loop (T, put YGROSS.L(t));
+2236  put / "Change TFP, %/year" ;
+2237  Loop (T, put ga(t));
+2238  put / "Capital stock, 2019$" ;
+2239  Loop (T, put k.l(t));
+2240   put / "Savings rate, fraction gross output" ;
+2241  Loop (T, put s.l(t));
+2242  put / "Gross investment, 2019$" ;
+2243  Loop (T, put I.l(t));
+2244  put / "Y gross-net, 2019$" ;
+2245  Loop (T, put ynet.l(t));
+2246  put / "Consumption per capita, 2019$ " ;
+2247  Loop (T, put CPC.l(T));
+2248  put / "Consumption" ;
+2249  Loop (T, put C.l(t));
+2250   
+2251  put / "Climate damages, fraction of output" ;
+2252  Loop (T, put DAMFRAC.l(T));
+2253  put / "Damages, 2019$" ;
+2254  Loop (T, put damages.l(t));
+2255  put / "Abatement, 2019$" ;
+2256  Loop (T, put abatecost.l(t));
+2257  put / "Abatement/0utput" ;
+2258  Loop (T, put  abaterat(t) );
+2259  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+2260  Loop (T, put sigma(t));
+2261  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+2262  Loop (T, put sigmaTOT(t));
+2263  put / "Cost, backstop technology ($/tCO2)" ;
+2264  Loop (T, put pbacktime(T));
+2265  put / "Total CO2 Emissions, GTCO2/year" ;
+2266  Loop (T, put Eco2.l(T));
+2267  put / "Total CO2e Emissions, GTCO2-E/year" ;
+2268  Loop (T, put Eco2e.l(T));
+2269  put / "Industrial CO2 Emissions, GTCO2/year" ;
+2270  Loop (T, put EIND.l(T));
+2271  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+2272  Loop (T, put CO2E_GHGabateB(t));
+2273  put / "Land emissions, GtCO2/year" ;
+2274  Loop (T, put eland(t));
+2275  put / "Cumulative CO2 emissions, GtC " ;
+2276  Loop (T, put ccatot.l(t));
+2277  put / "Atmospheric fraction CO2 since 1765 " ;
+2278  Loop (T, put  atfrac1765(t) );
+2279  put / "Atmospheric fraction CO2 since 2020 " ;
+2280  Loop (T, put  atfrac2020(t) );
+2281   
+2282  put / "Permanent C box"
+2283  Loop (T, put res0.L(t) );
+2284  put / "Slow C box"
+2285  Loop (T, put res1.L(t)   );
+2286  put / "Medium C box"
+2287  Loop (T, put res2.L(t)  );
+2288  put / "Fast C box"
+2289  Loop (T, put res3.L(t) );
+2290  put / "Temp Box 1"
+2291  Loop (T, put TBOX1.L(t) );
+2292  put / "Temp Box 2"
+2293  Loop (T, put TBOX2.L(t) );
+2294   
+2295  put / "Alpha"
+2296  Loop (T, put alpha.L(t)  );
+2297  put / "IFR"
+2298  Loop (T, put irft.L(t) );
+2299  put / "cacc"
+2300  Loop (T, put cacc.L(t) );
+2301  put / "ccatot"
+2302  Loop (T, put ccatot.L(t) );
+2303  put / "Share of output net zero emissions"
+2304  Loop (T, put cost1tot(t) );
+2305  put / "Growth p.c. cons (log)"
+2306  Loop (T, put gpccons(t) );
+2307  put / "Change interest rate"
+2308  Loop (T, put drshort(t) );
+2309  put / "Precautionary effect"
+2310  Loop (T, put (rprecaut(t)) );
+2311  put / "Long interest rate(%)"
+2312  Loop (T, put (rlong.l(t)) );
+2313  put / "RR1"
+2314  Loop (T, put (rr1(t)) );
+2315  put / "RR"
+2316  Loop (T, put (rr(t)) );
+2317   
+2318   
+2319  put / "Variance pc cons"
+2320  Loop (T, put (varpcc(t))) ;
+2321  put / "Growth TFP"
+2322  Loop (T, put (growthAL(t+1))) ;
+2323   
+2324   
+2325   
+2326   
+2327   
+2328   
+2329   
+2330   
+2331  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+2332   
+2333  put "   emshare3        ="      emshare3        ;
+2334  put "   tau0    ="      tau0    ;
+2335  put "   tau1    ="      tau1    ;
+2336  put "   tau2    ="      tau2    ;
+2337  put "   tau3    ="      tau3    ;
+2338  put "   teq1    ="      teq1    ;
+2339  put "   teq2    ="      teq2    ;
+2340  put "   d1      ="      d1      ;
+2341  put "   d2      ="      d2      ;
+2342  put "IRF0       ="      irf0;
+2343  put "   irC     ="      irC     ;
+2344  put "   irT     ="      irT     ;
+2345  put /"  fco22x  ="      fco22x  ;
+2346  put "   mat0    ="      mat0    ;
+2347  put "   res00   ="      res00   ;
+2348  put "   res10   ="      res10   ;
+2349  put "   res20   ="      res20   ;
+2350  put "   res30   ="      res30   ;
+2351  put "   mateq   ="      mateq   ;
+2352  put "   tbox10  ="      tbox10  ;
+2353  put "   tbox20  ="      tbox20  ;
+2354  put "   tatm0   ="      tatm0   ;
+2355   
+2356  put /"  a2      ="      a2base      ;
+2357   
+2358  put "   elasmu  ="      elasmu  ;
+2359  put "   prstp   ="      prstp   ;
+2360  put "gsigma1            ="      gsigma1         ;
+2361  put "    e1     ="        e1    ;
+2362  put "expcost2           ="       expcost2       ;
+2363  put "   gback   ="       gback  ;
+2364  put "   limmiu2050      ="       limmiu2070     ;
+2365  put "   limmiu2100      ="      limmiu2120      ;
+2366  put "   cprice1         ="       cprice1        ;
+2367  put "   gcprice         ="   gcprice  ;
+2368  put /;
+2369   
+2370  * 2% DISCOUNT RATE
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC2%-b-4-3-1.gms
+2372  * Discount program
+2373   
+2374  ifopt=1;
+2375  elasmu   = .001;
+2376  prstp    = .02;
+2377     RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+2378     RR(t)= RR1(t);
+2379   
+2380  optlrsav = (dk + .004)/(dk + .004*elasmu + prstp)*gama;
+2381  k0 = 409;
+2382  k.FX(tfirst)      = k0;
+2383  solve CO2 maximizing UTILITY using nlp ;
+2384  solve CO2 maximizing UTILITY using nlp ;
+2385  solve CO2 maximizing UTILITY using nlp ;
+2386   
+2387  *Post-Solution Parameter-Assignment
+2388   
+2389  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+2390  ppm(t)    = mat.l(t)/2.13;
+2391  abaterat(t) = abatecost.l(t)/y.l(t);
+2392  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+2393  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+2394  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+2395   
+2396   
+2397   
+2398   
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC2%-b-4-3-1.gms
+2400  put /"SCENARIO: R = 2%"
+2401  put /"Results of DICE2023-DISC-2%-b-4-3-1";
+2402  put /"2% DISCOUNT OPTIMAL";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+2404  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+2405   
+2406  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+2407  put /"ifopt =" ifopt;
+2408  put // "Period";
+2409  Loop (T, put T.val);
+2410  put / "Year" ;
+2411   
+2412  Parameters
+2413  gpccons(t)
+2414  growthAL(t)
+2415  drshort(t) ;
+2416  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+2417  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+2418  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+2419   
+2420  Loop (T, put (2015+(TSTEP*T.val) ));
+2421  put / "Objective function (2019$)" ;
+2422  put utility.l;
+2423  put / "Industrial CO2 GtCO2/yr" ;
+2424  Loop (T, put EIND.l(T));
+2425  put / "Atmospheric concentration C (ppm)" ;
+2426  Loop (T, put (MAT.l(T)/2.13));
+2427  put / "Atmospheric concentrations GtC" ;
+2428  Loop (T, put mat.l(t));
+2429  put / "Atmospheric temperaturer (deg c above preind) " ;
+2430  Loop (T, put TATM.l(T));
+2431  put / "Total forcings w/m2" ;
+2432  Loop (T, put forc.l(t));
+2433  put / "Forcings, exogenous w/m2" ;
+2434  Loop (T, put F_Misc(t) );
+2435  put / "CO2 forcings w/m2" ;
+2436  Loop (T, put FORC_CO2(t) );
+2437  put / "Actual other abatable GHG forcings w/m2" ;
+2438  Loop (T, put F_GHGabate.L(t) );
+2439   
+2440  put / "Carbon price (2019 $ per t CO2)" ;
+2441  Loop (T, put cprice.l(T));
+2442  put / "Emissions control rate" ;
+2443  Loop (T, put MIU.l(T));
+2444  put / "Social cost of carbon $/tCO2" ;
+2445  scc('1')=scc('2')*.85;
+2446  Loop (T, put scc(T));
+2447   
+2448  put / "Output, net net trill 2019$" ;
+2449  Loop (T, put Y.l(T));
+2450  put / "Short Interest rate, %/yr" ;
+2451  Loop (T, put Rshort.l(T));
+2452  put / "Population" ;
+2453  Loop (T, put L(T));
+2454  put / "TFP" ;
+2455  Loop (T, put AL(T));
+2456  put / "Output, gross-gross, 2019$" ;
+2457  Loop (T, put YGROSS.L(t));
+2458  put / "Change TFP, %/year" ;
+2459  Loop (T, put ga(t));
+2460  put / "Capital stock, 2019$" ;
+2461  Loop (T, put k.l(t));
+2462   put / "Savings rate, fraction gross output" ;
+2463  Loop (T, put s.l(t));
+2464  put / "Gross investment, 2019$" ;
+2465  Loop (T, put I.l(t));
+2466  put / "Y gross-net, 2019$" ;
+2467  Loop (T, put ynet.l(t));
+2468  put / "Consumption per capita, 2019$ " ;
+2469  Loop (T, put CPC.l(T));
+2470  put / "Consumption" ;
+2471  Loop (T, put C.l(t));
+2472   
+2473  put / "Climate damages, fraction of output" ;
+2474  Loop (T, put DAMFRAC.l(T));
+2475  put / "Damages, 2019$" ;
+2476  Loop (T, put damages.l(t));
+2477  put / "Abatement, 2019$" ;
+2478  Loop (T, put abatecost.l(t));
+2479  put / "Abatement/0utput" ;
+2480  Loop (T, put  abaterat(t) );
+2481  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+2482  Loop (T, put sigma(t));
+2483  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+2484  Loop (T, put sigmaTOT(t));
+2485  put / "Cost, backstop technology ($/tCO2)" ;
+2486  Loop (T, put pbacktime(T));
+2487  put / "Total CO2 Emissions, GTCO2/year" ;
+2488  Loop (T, put Eco2.l(T));
+2489  put / "Total CO2e Emissions, GTCO2-E/year" ;
+2490  Loop (T, put Eco2e.l(T));
+2491  put / "Industrial CO2 Emissions, GTCO2/year" ;
+2492  Loop (T, put EIND.l(T));
+2493  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+2494  Loop (T, put CO2E_GHGabateB(t));
+2495  put / "Land emissions, GtCO2/year" ;
+2496  Loop (T, put eland(t));
+2497  put / "Cumulative CO2 emissions, GtC " ;
+2498  Loop (T, put ccatot.l(t));
+2499  put / "Atmospheric fraction CO2 since 1765 " ;
+2500  Loop (T, put  atfrac1765(t) );
+2501  put / "Atmospheric fraction CO2 since 2020 " ;
+2502  Loop (T, put  atfrac2020(t) );
+2503   
+2504  put / "Permanent C box"
+2505  Loop (T, put res0.L(t) );
+2506  put / "Slow C box"
+2507  Loop (T, put res1.L(t)   );
+2508  put / "Medium C box"
+2509  Loop (T, put res2.L(t)  );
+2510  put / "Fast C box"
+2511  Loop (T, put res3.L(t) );
+2512  put / "Temp Box 1"
+2513  Loop (T, put TBOX1.L(t) );
+2514  put / "Temp Box 2"
+2515  Loop (T, put TBOX2.L(t) );
+2516   
+2517  put / "Alpha"
+2518  Loop (T, put alpha.L(t)  );
+2519  put / "IFR"
+2520  Loop (T, put irft.L(t) );
+2521  put / "cacc"
+2522  Loop (T, put cacc.L(t) );
+2523  put / "ccatot"
+2524  Loop (T, put ccatot.L(t) );
+2525  put / "Share of output net zero emissions"
+2526  Loop (T, put cost1tot(t) );
+2527  put / "Growth p.c. cons (log)"
+2528  Loop (T, put gpccons(t) );
+2529  put / "Change interest rate"
+2530  Loop (T, put drshort(t) );
+2531  put / "Precautionary effect"
+2532  Loop (T, put (rprecaut(t)) );
+2533  put / "Long interest rate(%)"
+2534  Loop (T, put (rlong.l(t)) );
+2535  put / "RR1"
+2536  Loop (T, put (rr1(t)) );
+2537  put / "RR"
+2538  Loop (T, put (rr(t)) );
+2539   
+2540   
+2541  put / "Variance pc cons"
+2542  Loop (T, put (varpcc(t))) ;
+2543  put / "Growth TFP"
+2544  Loop (T, put (growthAL(t+1))) ;
+2545   
+2546   
+2547   
+2548   
+2549   
+2550   
+2551   
+2552   
+2553  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+2554   
+2555  put "   emshare3        ="      emshare3        ;
+2556  put "   tau0    ="      tau0    ;
+2557  put "   tau1    ="      tau1    ;
+2558  put "   tau2    ="      tau2    ;
+2559  put "   tau3    ="      tau3    ;
+2560  put "   teq1    ="      teq1    ;
+2561  put "   teq2    ="      teq2    ;
+2562  put "   d1      ="      d1      ;
+2563  put "   d2      ="      d2      ;
+2564  put "IRF0       ="      irf0;
+2565  put "   irC     ="      irC     ;
+2566  put "   irT     ="      irT     ;
+2567  put /"  fco22x  ="      fco22x  ;
+2568  put "   mat0    ="      mat0    ;
+2569  put "   res00   ="      res00   ;
+2570  put "   res10   ="      res10   ;
+2571  put "   res20   ="      res20   ;
+2572  put "   res30   ="      res30   ;
+2573  put "   mateq   ="      mateq   ;
+2574  put "   tbox10  ="      tbox10  ;
+2575  put "   tbox20  ="      tbox20  ;
+2576  put "   tatm0   ="      tatm0   ;
+2577   
+2578  put /"  a2      ="      a2base      ;
+2579   
+2580  put "   elasmu  ="      elasmu  ;
+2581  put "   prstp   ="      prstp   ;
+2582  put "gsigma1            ="      gsigma1         ;
+2583  put "    e1     ="        e1    ;
+2584  put "expcost2           ="       expcost2       ;
+2585  put "   gback   ="       gback  ;
+2586  put "   limmiu2050      ="       limmiu2070     ;
+2587  put "   limmiu2100      ="      limmiu2120      ;
+2588  put "   cprice1         ="       cprice1        ;
+2589  put "   gcprice         ="   gcprice  ;
+2590  put /;
+2591   
+2592  * 1% DISCOUNT RATE
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC1%-b-4-3-1.gms
+2594  * Discount program
+2595   
+2596  ifopt=1;
+2597  elasmu   = .001;
+2598  prstp    = .01;
+2599     RR1(t) = 1/((1+prstp)**(tstep*(t.val-1)));
+2600     RR(t)= RR1(t);
+2601   
+2602  optlrsav = (dk + .004)/(dk + .004*elasmu + prstp)*gama;
+2603  k0 = 420;
+2604  solve CO2 maximizing UTILITY using nlp ;
+2605  solve CO2 maximizing UTILITY using nlp ;
+2606  solve CO2 maximizing UTILITY using nlp ;
+2607   
+2608  *Post-Solution Parameter-Assignment
+2609   
+2610  scc(t) = -1000*eco2eq.m(t)/(.00001+cc.m(t));
+2611  ppm(t)    = mat.l(t)/2.13;
+2612  abaterat(t) = abatecost.l(t)/y.l(t);
+2613  atfrac2020(t) = ((mat.l(t)-mat0)/(ccatot.l(t)+.00001-CumEmiss0  ));
+2614  atfrac1765(t) = ((mat.l(t)-mateq)/(.00001+ccatot.l(t)  ));
+2615  FORC_CO2(t) = fco22x*((log((MAT.l(t)/mateq))/log(2)));
+2616   
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC1%-b-4-3-1.gms
+2618   
+2619  put /"SCENARIO: R = 1%"
+2620  put /"Results of DICE2023-DISC1%-4-3-1";
+2621  put /"1% DISCOUNT OPTIMAL";
+INCLUDE    /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+2623  * Produces a file "DICE2023-b-4-3-10.csv" in the base directory
+2624   
+2625  put /"This is optimal if ifopt = 1 and baseline if ifopt = 0";
+2626  put /"ifopt =" ifopt;
+2627  put // "Period";
+2628  Loop (T, put T.val);
+2629  put / "Year" ;
+2630   
+2631  Parameters
+2632  gpccons(t)
+2633  growthAL(t)
+2634  drshort(t) ;
+2635  gpccons(t+1)=log(cpc.l(T+1)/cpc.l(t))/5;
+2636  drshort(t+1) = rshort.l(t+1)-rshort.l(t) ;
+2637  growthAL(t+1)=log((AL(t+1)/AL(t)))/5;
+2638   
+2639  Loop (T, put (2015+(TSTEP*T.val) ));
+2640  put / "Objective function (2019$)" ;
+2641  put utility.l;
+2642  put / "Industrial CO2 GtCO2/yr" ;
+2643  Loop (T, put EIND.l(T));
+2644  put / "Atmospheric concentration C (ppm)" ;
+2645  Loop (T, put (MAT.l(T)/2.13));
+2646  put / "Atmospheric concentrations GtC" ;
+2647  Loop (T, put mat.l(t));
+2648  put / "Atmospheric temperaturer (deg c above preind) " ;
+2649  Loop (T, put TATM.l(T));
+2650  put / "Total forcings w/m2" ;
+2651  Loop (T, put forc.l(t));
+2652  put / "Forcings, exogenous w/m2" ;
+2653  Loop (T, put F_Misc(t) );
+2654  put / "CO2 forcings w/m2" ;
+2655  Loop (T, put FORC_CO2(t) );
+2656  put / "Actual other abatable GHG forcings w/m2" ;
+2657  Loop (T, put F_GHGabate.L(t) );
+2658   
+2659  put / "Carbon price (2019 $ per t CO2)" ;
+2660  Loop (T, put cprice.l(T));
+2661  put / "Emissions control rate" ;
+2662  Loop (T, put MIU.l(T));
+2663  put / "Social cost of carbon $/tCO2" ;
+2664  scc('1')=scc('2')*.85;
+2665  Loop (T, put scc(T));
+2666   
+2667  put / "Output, net net trill 2019$" ;
+2668  Loop (T, put Y.l(T));
+2669  put / "Short Interest rate, %/yr" ;
+2670  Loop (T, put Rshort.l(T));
+2671  put / "Population" ;
+2672  Loop (T, put L(T));
+2673  put / "TFP" ;
+2674  Loop (T, put AL(T));
+2675  put / "Output, gross-gross, 2019$" ;
+2676  Loop (T, put YGROSS.L(t));
+2677  put / "Change TFP, %/year" ;
+2678  Loop (T, put ga(t));
+2679  put / "Capital stock, 2019$" ;
+2680  Loop (T, put k.l(t));
+2681   put / "Savings rate, fraction gross output" ;
+2682  Loop (T, put s.l(t));
+2683  put / "Gross investment, 2019$" ;
+2684  Loop (T, put I.l(t));
+2685  put / "Y gross-net, 2019$" ;
+2686  Loop (T, put ynet.l(t));
+2687  put / "Consumption per capita, 2019$ " ;
+2688  Loop (T, put CPC.l(T));
+2689  put / "Consumption" ;
+2690  Loop (T, put C.l(t));
+2691   
+2692  put / "Climate damages, fraction of output" ;
+2693  Loop (T, put DAMFRAC.l(T));
+2694  put / "Damages, 2019$" ;
+2695  Loop (T, put damages.l(t));
+2696  put / "Abatement, 2019$" ;
+2697  Loop (T, put abatecost.l(t));
+2698  put / "Abatement/0utput" ;
+2699  Loop (T, put  abaterat(t) );
+2700  put / "Sigmabase (CO2/output, no controls, industrial CO2)" ;
+2701  Loop (T, put sigma(t));
+2702  put / "Sigmatot,(CO2/output, no controls, all CO2)" ;
+2703  Loop (T, put sigmaTOT(t));
+2704  put / "Cost, backstop technology ($/tCO2)" ;
+2705  Loop (T, put pbacktime(T));
+2706  put / "Total CO2 Emissions, GTCO2/year" ;
+2707  Loop (T, put Eco2.l(T));
+2708  put / "Total CO2e Emissions, GTCO2-E/year" ;
+2709  Loop (T, put Eco2e.l(T));
+2710  put / "Industrial CO2 Emissions, GTCO2/year" ;
+2711  Loop (T, put EIND.l(T));
+2712  put / "Base abateable non-CO2 emission, GTCO2-E/year" ;
+2713  Loop (T, put CO2E_GHGabateB(t));
+2714  put / "Land emissions, GtCO2/year" ;
+2715  Loop (T, put eland(t));
+2716  put / "Cumulative CO2 emissions, GtC " ;
+2717  Loop (T, put ccatot.l(t));
+2718  put / "Atmospheric fraction CO2 since 1765 " ;
+2719  Loop (T, put  atfrac1765(t) );
+2720  put / "Atmospheric fraction CO2 since 2020 " ;
+2721  Loop (T, put  atfrac2020(t) );
+2722   
+2723  put / "Permanent C box"
+2724  Loop (T, put res0.L(t) );
+2725  put / "Slow C box"
+2726  Loop (T, put res1.L(t)   );
+2727  put / "Medium C box"
+2728  Loop (T, put res2.L(t)  );
+2729  put / "Fast C box"
+2730  Loop (T, put res3.L(t) );
+2731  put / "Temp Box 1"
+2732  Loop (T, put TBOX1.L(t) );
+2733  put / "Temp Box 2"
+2734  Loop (T, put TBOX2.L(t) );
+2735   
+2736  put / "Alpha"
+2737  Loop (T, put alpha.L(t)  );
+2738  put / "IFR"
+2739  Loop (T, put irft.L(t) );
+2740  put / "cacc"
+2741  Loop (T, put cacc.L(t) );
+2742  put / "ccatot"
+2743  Loop (T, put ccatot.L(t) );
+2744  put / "Share of output net zero emissions"
+2745  Loop (T, put cost1tot(t) );
+2746  put / "Growth p.c. cons (log)"
+2747  Loop (T, put gpccons(t) );
+2748  put / "Change interest rate"
+2749  Loop (T, put drshort(t) );
+2750  put / "Precautionary effect"
+2751  Loop (T, put (rprecaut(t)) );
+2752  put / "Long interest rate(%)"
+2753  Loop (T, put (rlong.l(t)) );
+2754  put / "RR1"
+2755  Loop (T, put (rr1(t)) );
+2756  put / "RR"
+2757  Loop (T, put (rr(t)) );
+2758   
+2759   
+2760  put / "Variance pc cons"
+2761  Loop (T, put (varpcc(t))) ;
+2762  put / "Growth TFP"
+2763  Loop (T, put (growthAL(t+1))) ;
+2764   
+2765   
+2766   
+2767   
+2768   
+2769   
+2770   
+2771   
+2772  put /"  yr0     ="      yr0     ; put " emshare0        ="      emshare0        ;put "  emshare1        ="      emshare1        ; put " emshare2        ="      emshare2        ;
+2773   
+2774  put "   emshare3        ="      emshare3        ;
+2775  put "   tau0    ="      tau0    ;
+2776  put "   tau1    ="      tau1    ;
+2777  put "   tau2    ="      tau2    ;
+2778  put "   tau3    ="      tau3    ;
+2779  put "   teq1    ="      teq1    ;
+2780  put "   teq2    ="      teq2    ;
+2781  put "   d1      ="      d1      ;
+2782  put "   d2      ="      d2      ;
+2783  put "IRF0       ="      irf0;
+2784  put "   irC     ="      irC     ;
+2785  put "   irT     ="      irT     ;
+2786  put /"  fco22x  ="      fco22x  ;
+2787  put "   mat0    ="      mat0    ;
+2788  put "   res00   ="      res00   ;
+2789  put "   res10   ="      res10   ;
+2790  put "   res20   ="      res20   ;
+2791  put "   res30   ="      res30   ;
+2792  put "   mateq   ="      mateq   ;
+2793  put "   tbox10  ="      tbox10  ;
+2794  put "   tbox20  ="      tbox20  ;
+2795  put "   tatm0   ="      tatm0   ;
+2796   
+2797  put /"  a2      ="      a2base      ;
+2798   
+2799  put "   elasmu  ="      elasmu  ;
+2800  put "   prstp   ="      prstp   ;
+2801  put "gsigma1            ="      gsigma1         ;
+2802  put "    e1     ="        e1    ;
+2803  put "expcost2           ="       expcost2       ;
+2804  put "   gback   ="       gback  ;
+2805  put "   limmiu2050      ="       limmiu2070     ;
+2806  put "   limmiu2100      ="      limmiu2120      ;
+2807  put "   cprice1         ="       cprice1        ;
+2808  put "   gcprice         ="   gcprice  ;
+2809  put /;
+2810   
+2811  *DISPLAY FOR MAJOR VARIABLES
+2812  option decimals = 6;
+2813  display gpccons, varpcc,RLONG.l, rprecaut,RSHORT.l,cpc.l,rr,miu.l,scc, mat.l,tatm.l,eco2eq.m,miu.l;
+2814  display ifopt, elasmu, rartp, pi, k0, betaclim, prstp,k0,siggc1,delA,a2base, utility.l ;
+
+**** LIST OF STRAY NAMES - CHECK DECLARATIONS FOR SPURIOUS COMMAS
+**** STRAY NAME MU OF TYPE VAR  
+**** STRAY NAME ML OF TYPE VAR  
+GAMS 50.3.0  5a352073 Jul 30, 2025          DAX-DAC arm 64bit/macOS - 08/07/25 17:06:13 Page 3
+October 12, 2023 (DICE2023-b-4-3-10.gms)
+Include File Summary
+
+
+   SEQ   GLOBAL TYPE      PARENT   LOCAL  FILENAME
+
+     1        1 INPUT          0       0  /Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/DICE2023-b-4-3-10.gms
+     2      107 INCLUDE        1     107  ./Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/Nonco2-b-4-3-1.gms
+     3      205 INCLUDE        1     160  ./Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/FAIR-beta-4-3-1.gms
+     4      377 INCLUDE        1     214  ./Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/Putlong-4-3-10.gms
+     5      379 INCLUDE        4       2  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-opt-b-4-3-10.gms
+     6      397 INCLUDE        4       3  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-b-4-3-10.gms
+     7      403 INCLUDE        4       4  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-opt-b-4-3-10.gms
+     8      410 INCLUDE        4       5  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+     9      600 INCLUDE        4       8  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-T2-b-4-3-1.gms
+    10      624 INCLUDE        4       9  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-T2-b-4-3-1.gms
+    11      628 INCLUDE        4      10  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    12      818 INCLUDE        4      13  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-T15-b-4-3-1.gms
+    13      842 INCLUDE        4      14  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-T15-b-4-3-1.gms
+    14      846 INCLUDE        4      15  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    15     1036 INCLUDE        4      18  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-altdam-b-4-3-1.gms
+    16     1057 INCLUDE        4      19  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-altdam-b-4-3-1.gms
+    17     1063 INCLUDE        4      20  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    18     1253 INCLUDE        4      23  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-paris-b-4-3-1.gms
+    19     1278 INCLUDE        4      24  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-PARIS-b-4-3-1.gms
+    20     1282 INCLUDE        4      25  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    21     1472 INCLUDE        4      28  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def-base-b-4-3-1.gms
+    22     1499 INCLUDE        4      29  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-base-b-4-3-1.gms
+    23     1505 INCLUDE        4      30  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    24     1695 INCLUDE        4      33  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC5%-b-4-3-1.gms
+    25     1732 INCLUDE        4      34  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC5%-b-4-3-1.gms
+    26     1736 INCLUDE        4      35  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    27     1926 INCLUDE        4      38  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC4%-b-4-3-1.gms
+    28     1956 INCLUDE        4      39  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC4%-b-4-3-1.gms
+    29     1960 INCLUDE        4      40  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    30     2150 INCLUDE        4      43  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC3%-b-4-3-1.gms
+    31     2177 INCLUDE        4      44  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC3%-b-4-3-1.gms
+    32     2181 INCLUDE        4      45  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    33     2371 INCLUDE        4      48  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC2%-b-4-3-1.gms
+    34     2399 INCLUDE        4      49  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC2%-b-4-3-1.gms
+    35     2403 INCLUDE        4      50  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+    36     2593 INCLUDE        4      53  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/def_DISC1%-b-4-3-1.gms
+    37     2617 INCLUDE        4      54  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put-DISC1%-b-4-3-1.gms
+    38     2622 INCLUDE        4      55  ../Users/chanda.debmallya/Desktop/GAMS DICE 2023/DICE 2023 Carbon Budget/Include/put_list_module-b-4-3-10.gms
+
+
+COMPILATION TIME     =        0.010 SECONDS      3 MB  50.3.0 5a352073 DAX-DAC
+GAMS 50.3.0  5a352073 Jul 30, 2025          DAX-DAC arm 64bit/macOS - 08/07/25 17:06:13 Page 4
+October 12, 2023 (DICE2023-b-4-3-10.gms)
+Range Statistics    SOLVE CO2 Using NLP From line 374
+
+
+RANGE STATISTICS (ABSOLUTE NON-ZERO FINITE VALUES)
+
+RHS       [min, max] : [ 5.813E-03, 6.276E+03] - Zero values observed as well
+Bound     [min, max] : [ 1.000E-04, 1.000E+06] - Zero values observed as well
+Matrix    [min, max] : [ 2.000E-07, 8.351E+07] - Zero values observed as well
+
+GAMS 50.3.0  5a352073 Jul 30, 2025          DAX-DAC arm 64bit/macOS - 08/07/25 17:06:13 Page 5
+October 12, 2023 (DICE2023-b-4-3-10.gms)
+Model Statistics    SOLVE CO2 Using NLP From line 374
+
+
+MODEL STATISTICS
+
+BLOCKS OF EQUATIONS          35     SINGLE EQUATIONS        2,741
+BLOCKS OF VARIABLES          37     SINGLE VARIABLES        2,915  563 projected
+NON ZERO ELEMENTS         8,054     NON LINEAR N-Z          3,061
+CODE LENGTH              21,666     CONSTANT POOL             761
+
+
+
+**** The model exceeds the demo license limits for nonlinear models of more than 1000 rows or columns
+     As an academic user, you can submit large models to the NEOS service for free (see https://www.gams.com/neos)
+     Alternatively, feel free to contact sales@gams.com to discuss your options
+
+GENERATION TIME      =        0.004 SECONDS      5 MB  50.3.0 5a352073 DAX-DAC
+**** Terminated due to a licensing error
+**** License file: /Library/Frameworks/GAMS.framework/Versions/50/Resources/gamslice.txt
+
+**** Current license content:
+     GAMS_Demo,_for_EULA_and_demo_limitations_see___G250531/0001CB-GEN
+     https://www.gams.com/latest/docs/UG%5FLicense.html_______________
+     1496683900_______________________________________________________
+     0801354905_______________________________________________________
+     DC0000_______g_1_______________________________C_Eval____________
