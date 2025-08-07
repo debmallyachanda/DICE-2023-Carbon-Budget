@@ -4,7 +4,7 @@ $offtext
 
 $title October 12, 2023 (DICE2023-b-4-3-10.gms)
 
-set        t  Time periods (5 years per period)                   /1*81/
+set        t  Time periods (5 years per period)                   /1*25/
 PARAMETERS
 ** If optimal control
         ifopt    Indicator where optimized is 1 and base is 0     /1/
